@@ -43,7 +43,13 @@ _logger = get_logger("data.mapping")
 
 
 class DatasetSection(BaseModel):
-    """Dataset-level declarations of a mapping config."""
+    """Dataset-level declarations of a mapping config.
+
+    The file-format fields describe how the export is written, not what it
+    contains: vendor exports may precede the header with comment lines, may
+    prefix the header row itself, and may spell missing values as a literal
+    token. Declaring them here keeps dataset specifics out of code (M-07).
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -51,6 +57,13 @@ class DatasetSection(BaseModel):
     source_timezone: str
     turbine_column: str | None = None
     turbine_id_constant: str | None = None
+    #: Lines to skip before the header row (e.g. vendor comment banner).
+    skip_lines: int = 0
+    #: Prefix to strip from the first header cell when the header row is
+    #: itself written as a comment line.
+    header_comment_prefix: str | None = None
+    #: Literal strings that denote missing/erroneous values.
+    missing_value_tokens: tuple[str, ...] = ("NaN",)
 
 
 class ColumnSpec(BaseModel):

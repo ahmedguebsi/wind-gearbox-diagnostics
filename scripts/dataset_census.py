@@ -87,6 +87,15 @@ def sha256_of(path: Path) -> str:
     return digest.hexdigest()
 
 
+#: Files the author has classified as their own derived artefacts
+#: (2026-08-11). Inventoried and hashed for provenance; never read.
+AUTHOR_DERIVED_FILES = {
+    "data_dictionary_2020.csv",
+    "data_dictionary_turbine_5.csv",
+    "untitled-1.txt",
+}
+
+
 def classify(path: Path) -> str:
     """Classify a file by name/extension. Never infers from content."""
     name, suffix = path.name.lower(), path.suffix.lower()
@@ -94,6 +103,8 @@ def classify(path: Path) -> str:
         return "SOURCE_SCADA"
     if suffix == ".csv" and name.startswith("status_"):
         return "SOURCE_STATUS"
+    if name in AUTHOR_DERIVED_FILES:
+        return "EXCLUDED_AUTHOR_DERIVED"
     if suffix in {".xlsx", ".xls", ".md", ".py"}:
         return "EXCLUDED_DERIVED"
     return "UNCLASSIFIED_REQUIRES_AUTHOR_DECISION"
@@ -160,12 +171,32 @@ _HEADER_PATTERNS = {
 }
 
 
+#: Encodings tried in order. UTF-8 is attempted STRICTLY first: silent
+#: character replacement would corrupt degree signs and vendor text without
+#: any trace, so a file that is not valid UTF-8 falls back explicitly and the
+#: encoding actually used is recorded in the output.
+ENCODING_CANDIDATES = ("utf-8", "cp1252", "latin-1")
+
+
+def detect_encoding(path: Path) -> str:
+    """First candidate encoding that decodes the whole file strictly."""
+    raw = path.read_bytes()
+    for encoding in ENCODING_CANDIDATES:
+        try:
+            raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+        return encoding
+    raise SystemExit(f"Cannot decode {path} with any of {ENCODING_CANDIDATES}")
+
+
 def header_provenance(path: Path) -> dict[str, Any]:
     """Parse the nine leading ``#`` lines and the row-10 column header.
 
     Every field is reported as *declared by the file*; nothing is assumed.
     """
-    with path.open("r", encoding="utf-8", errors="replace") as fh:
+    encoding = detect_encoding(path)
+    with path.open("r", encoding=encoding) as fh:
         lines = [fh.readline().rstrip("\n") for _ in range(HEADER_COMMENT_LINES + 1)]
     comment_lines = lines[:HEADER_COMMENT_LINES]
     header_line = lines[HEADER_COMMENT_LINES]
@@ -183,8 +214,7 @@ def header_provenance(path: Path) -> dict[str, Any]:
             skiprows=HEADER_COMMENT_LINES,
             nrows=0,
             header=0,
-            encoding="utf-8",
-            encoding_errors="replace",
+            encoding=encoding,
         ).columns
     ]
     columns = list(raw_columns)
@@ -199,6 +229,7 @@ def header_provenance(path: Path) -> dict[str, Any]:
         # As written in the file — what `usecols` must match.
         "columns_raw": raw_columns,
         "n_columns": len(columns),
+        "encoding_detected": encoding,
     }
 
 
@@ -219,8 +250,7 @@ def _read_source(path: Path, prov: dict[str, Any], **kwargs: Any) -> Any:
         path,
         skiprows=HEADER_COMMENT_LINES,
         header=0,
-        encoding="utf-8",
-        encoding_errors="replace",
+        encoding=prov.get("encoding_detected", "utf-8"),
         **kwargs,
     )
     if "chunksize" in kwargs:

@@ -20,7 +20,9 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from app.core.errors import SchemaError
 
 #: Current canonical schema version (semver). Bump via ADR-004 only.
-SCHEMA_VERSION = "1.0.0"
+#: 1.1.0 — added `plausible_range` to CanonicalVariable so physical bounds
+#: are declared with the variable rather than duplicated in validation.
+SCHEMA_VERSION = "1.1.0"
 
 _SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
@@ -41,15 +43,30 @@ class VariableRole(StrEnum):
 #: Structural roles that must appear exactly once per schema.
 UNIQUE_ROLES: tuple[VariableRole, ...] = (VariableRole.TIMESTAMP, VariableRole.TURBINE_ID)
 
+#: Canonical names referenced by pipeline logic. Other modules import these
+#: constants rather than embedding the strings, so every canonical name
+#: resolves through this module (M-06 acceptance 1).
+TIMESTAMP = "timestamp"
+TURBINE_ID = "turbine_id"
+WIND_SPEED = "wind_speed"
+ROTOR_SPEED = "rotor_speed"
+GENERATOR_SPEED = "generator_speed"
+ACTIVE_POWER = "active_power"
+PITCH_ANGLE = "pitch_angle"
+AMBIENT_TEMPERATURE = "ambient_temperature"
+NACELLE_TEMPERATURE = "nacelle_temperature"
+GEARBOX_OIL_TEMPERATURE = "gearbox_oil_temperature"
+GEARBOX_BEARING_TEMPERATURE = "gearbox_bearing_temperature"
+
 #: Thermal targets the thesis requires at minimum (PROJECT.md §8).
 REQUIRED_TARGET_NAMES: tuple[str, ...] = (
-    "gearbox_oil_temperature",
-    "gearbox_bearing_temperature",
+    GEARBOX_OIL_TEMPERATURE,
+    GEARBOX_BEARING_TEMPERATURE,
 )
 
 
 class CanonicalVariable(BaseModel):
-    """One canonical variable: generic name, role, unit."""
+    """One canonical variable: generic name, role, unit, physical bounds."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -57,6 +74,9 @@ class CanonicalVariable(BaseModel):
     role: VariableRole
     unit: str | None = None
     description: str = ""
+    #: Physically impossible bounds (not operating limits). Validation
+    #: reports values outside them; it never clips or corrects.
+    plausible_range: tuple[float, float] | None = None
 
 
 class CanonicalSchema(BaseModel):
@@ -145,18 +165,56 @@ def default_schema() -> CanonicalSchema:
     :meth:`CanonicalSchema.extended` under a bumped version."""
     celsius = "C"
     variables = (
-        CanonicalVariable(name="timestamp", role=VariableRole.TIMESTAMP, unit=None),
-        CanonicalVariable(name="turbine_id", role=VariableRole.TURBINE_ID, unit=None),
-        CanonicalVariable(name="wind_speed", role=VariableRole.PREDICTOR, unit="m/s"),
-        CanonicalVariable(name="rotor_speed", role=VariableRole.PREDICTOR, unit="rpm"),
-        CanonicalVariable(name="generator_speed", role=VariableRole.PREDICTOR, unit="rpm"),
-        CanonicalVariable(name="active_power", role=VariableRole.PREDICTOR, unit="kW"),
-        CanonicalVariable(name="pitch_angle", role=VariableRole.PREDICTOR, unit="deg"),
-        CanonicalVariable(name="ambient_temperature", role=VariableRole.PREDICTOR, unit=celsius),
-        CanonicalVariable(name="nacelle_temperature", role=VariableRole.PREDICTOR, unit=celsius),
-        CanonicalVariable(name="gearbox_oil_temperature", role=VariableRole.TARGET, unit=celsius),
+        CanonicalVariable(name=TIMESTAMP, role=VariableRole.TIMESTAMP, unit=None),
+        CanonicalVariable(name=TURBINE_ID, role=VariableRole.TURBINE_ID, unit=None),
         CanonicalVariable(
-            name="gearbox_bearing_temperature", role=VariableRole.TARGET, unit=celsius
+            name=WIND_SPEED,
+            role=VariableRole.PREDICTOR,
+            unit="m/s",
+            plausible_range=(0.0, 120.0),
+        ),
+        CanonicalVariable(
+            name=ROTOR_SPEED,
+            role=VariableRole.PREDICTOR,
+            unit="rpm",
+            plausible_range=(-1.0, 100.0),
+        ),
+        CanonicalVariable(
+            name=GENERATOR_SPEED,
+            role=VariableRole.PREDICTOR,
+            unit="rpm",
+            plausible_range=(-1.0, 5000.0),
+        ),
+        CanonicalVariable(name=ACTIVE_POWER, role=VariableRole.PREDICTOR, unit="kW"),
+        CanonicalVariable(
+            name=PITCH_ANGLE,
+            role=VariableRole.PREDICTOR,
+            unit="deg",
+            plausible_range=(-360.0, 360.0),
+        ),
+        CanonicalVariable(
+            name=AMBIENT_TEMPERATURE,
+            role=VariableRole.PREDICTOR,
+            unit=celsius,
+            plausible_range=(-90.0, 70.0),
+        ),
+        CanonicalVariable(
+            name=NACELLE_TEMPERATURE,
+            role=VariableRole.PREDICTOR,
+            unit=celsius,
+            plausible_range=(-90.0, 120.0),
+        ),
+        CanonicalVariable(
+            name=GEARBOX_OIL_TEMPERATURE,
+            role=VariableRole.TARGET,
+            unit=celsius,
+            plausible_range=(-90.0, 200.0),
+        ),
+        CanonicalVariable(
+            name=GEARBOX_BEARING_TEMPERATURE,
+            role=VariableRole.TARGET,
+            unit=celsius,
+            plausible_range=(-90.0, 250.0),
         ),
     )
     return CanonicalSchema(schema_version=SCHEMA_VERSION, variables=variables)

@@ -19,7 +19,7 @@ from app.data.schema import (
 # Pinned content hash of the default schema at SCHEMA_VERSION. If this test
 # fails, the schema content changed: bump SCHEMA_VERSION and log the change
 # in docs/DECISIONS.md ADR-004, then re-pin (M-06 acceptance 2).
-PINNED_SCHEMA_HASH = "d32fe02ebc6cf0e8072445c84efd1767c8eb838a4e996d874bce578975c6ad72"
+PINNED_SCHEMA_HASH = "2ea32581672e3d0856405b98ed45877d8277f7ee5b690025ad669d5a4ea72472"
 
 
 def _minimal_variables() -> tuple[CanonicalVariable, ...]:
@@ -90,7 +90,7 @@ class TestVersionDiscipline:
         )
         with pytest.raises(SchemaError):
             default_schema().extended(SCHEMA_VERSION, extra)
-        extended = default_schema().extended("1.1.0", extra)
+        extended = default_schema().extended("1.2.0", extra)
         assert "generator_bearing_temperature" in extended.names()
         assert extended.content_hash() != default_schema().content_hash()
 

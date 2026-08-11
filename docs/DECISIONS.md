@@ -94,6 +94,73 @@ Justification:     Chapters 1–2 identify no RQ1 need the two-model set cannot
                    (risk R9) for no evidential gain.
 Affected modules:  none (M-17 remains a single BASELINE model).
 
+## ADR-009 — Modelling data span
+
+Status:            CLOSED (2026-08-11)
+Question:          Which period of the Kelmarsh holdings is used?
+Decision:          Author ruling (2026-08-11): **2016-05-03 to 2021-06-30**,
+                   all six turbines, everything in between. Year folders
+                   2016–2021 are treated uniformly, with no special handling
+                   for any of them.
+Justification:     The pre-May-2016 period is excluded because the gear-oil
+                   thermal channels are empty there — 100% null from the 2016
+                   file start until 2016-05-03 09:40 on every turbine
+                   (LIM-005). This is a **stated data constraint, not a
+                   selection**: there is no thermal signal to model or
+                   monitor before that date, so the boundary is imposed by
+                   the data rather than chosen among alternatives.
+Consequence:       The span covers five seasonal cycles, which clears the
+                   PROJECT.md §14 seasonal-coverage WARNING (training windows
+                   drawn from it can exceed 12 months and span all calendar
+                   months). LIM-004's twelve-month concern is retired;
+                   LIM-007's uneven-holdings note stands for the 2021 half
+                   year at the end of the span.
+Affected modules:  M-09 (ingestion span filter), M-13 (splitting), M-12
+                   (healthy-state population).
+
+## ADR-010 — Split constraint: the 2019 code-1860 window is TEST
+
+Status:            CLOSED (2026-08-11) — recorded BEFORE any split is computed
+Question:          Where must the chronological split place the code-1860
+                   occurrences (Kelmarsh 1, 2019)?
+Decision:          Author ruling (2026-08-11): the chronological split must
+                   place the 1860 event in the **TEST/monitoring period**,
+                   with healthy training data preceding it.
+Justification:     Recorded in advance so the split is documented as a stated
+                   design constraint rather than reconstructed after results
+                   exist. It is the only gearbox-indexed candidate in the
+                   holdings with usable preceding thermal coverage (median
+                   798 h, max 1,848 h of continuous covered SCADA before its
+                   occurrences), so a split placing it in training would
+                   leave no candidate monitoring target at all.
+Scope note:        This constrains split *placement* only. It is NOT a
+                   designation: code 1860 is a filter-restriction alarm, not
+                   maintenance-verified gearbox damage, and what it
+                   represents remains open under D-04.
+Guard interaction: Chronological ordering (LOCKED-04) is unaffected — the
+                   constraint fixes which side of the boundary the window
+                   falls on, never the ordering itself.
+Affected modules:  M-13 (split configuration), M-27 (evaluation targets).
+
+## ADR-011 — Author-derived files excluded from census reading
+
+Status:            CLOSED (2026-08-11)
+Question:          How are the non-source files found in the export folders
+                   treated?
+Decision:          Author confirmation (2026-08-11). Classified
+                   EXCLUDED_AUTHOR_DERIVED — inventoried and hashed for
+                   provenance, never read:
+                   `DATA_DICTIONARY_2020.csv`,
+                   `DATA_DICTIONARY_Turbine_5.csv`, `Untitled-1.txt`.
+                   The `.venv`, `.venv-1` and `.vscode` directories in the
+                   2016 folder are development artefacts: counted and
+                   reported in aggregate, never itemised, hashed, or read.
+Justification:     These are the author's own derived outputs, not Cubico
+                   source data; reading them would risk circulating derived
+                   numbers as if they were source facts.
+Affected modules:  `scripts/dataset_census.py` (`classify`,
+                   `is_environment_noise`).
+
 ## ADR-008 — Initial FMEA rule base
 
 Status:            CLOSED (2026-08-11) — decision queue D-01
@@ -141,8 +208,18 @@ Status:            OPEN (standing log)
 Question:          Standing record of `schema_version` bumps (semver) required
                    by PROJECT.md §8. Each schema change appends an entry here
                    with its rationale.
-Current version:   1.0.0 (initial; stamped by M-06 `app/data/schema.py`)
-Affected modules:  M-06, M-07, M-29
+Current version:   1.1.0 (stamped by M-06 `app/data/schema.py`)
+Version log:
+  - 1.0.0 (2026-08-11) initial canonical schema: structural variables, the
+    thesis-identified upstream predictors, and the two required thermal
+    targets.
+  - 1.1.0 (2026-08-11) added `plausible_range` to `CanonicalVariable`, so a
+    variable's physically impossible bounds are declared alongside the
+    variable itself rather than duplicated inside the validation layer.
+    Minor bump: additive, no variable renamed or removed. Detected by the
+    pinned schema-hash drift test, which is what that test exists for.
+Affected modules:  M-06, M-07, M-10 (RangeRule reads bounds from the schema),
+                   M-29
 
 ## ADR-005 — FMEA rule sign-off log
 
