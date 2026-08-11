@@ -1,0 +1,44 @@
+# CI gates (PROJECT.md §7, §32; IMPLEMENTATION_PLAN.md M-36).
+# A red pipeline blocks merging. Gates: lint, format, types, import contract,
+# full test suite.
+#
+# TODO(M-31): add the fixture-reproduction gate once the `reproduce` command
+# exists — `python -m app.experiments reproduce <fixture-exp>` must report
+# EXACT MATCH on predictions (PROJECT.md §15, §32).
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv (pinned Python from backend/.python-version)
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync locked environment
+        run: uv sync --frozen
+
+      - name: Lint (ruff)
+        run: uv run ruff check .
+
+      - name: Format check (ruff)
+        run: uv run ruff format --check .
+
+      - name: Type check (mypy)
+        run: uv run mypy
+
+      - name: Import-direction contract (import-linter)
+        run: uv run lint-imports
+
+      - name: Tests with coverage (pytest)
+        run: uv run pytest

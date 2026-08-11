@@ -1,0 +1,26 @@
+# Pre-commit hooks (PROJECT.md §5 tooling, M-36).
+# Local hooks run through uv so they use the project's locked environment —
+# identical tool versions to CI.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --project backend ruff check backend
+        language: system
+        pass_filenames: false
+      - id: ruff-format
+        name: ruff format check
+        entry: uv run --project backend ruff format --check backend
+        language: system
+        pass_filenames: false
+      - id: mypy
+        name: mypy
+        entry: uv run --project backend mypy --config-file backend/pyproject.toml backend/app
+        language: system
+        pass_filenames: false
+      - id: import-linter
+        name: import-linter (dependency-direction contract)
+        entry: uv run --project backend lint-imports --config backend/pyproject.toml
+        language: system
+        pass_filenames: false
