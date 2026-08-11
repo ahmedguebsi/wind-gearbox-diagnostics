@@ -89,19 +89,80 @@ Affected RQ(s):     RQ2, RQ3; bears on D-04 (ground truth) and D-05 (whether
 Mitigation status:  OPEN — event definition and counting are author
                     decisions; no inference drawn here.
 
-## LIM-004 — Twelve months of coverage only
+## LIM-004 — Coverage span (superseded in part by LIM-007)
 
 Date discovered:    2026-08-11
-Description:        The holding is calendar year 2020 only: 52,704 rows per
-                    turbine at a perfectly regular 10-minute interval,
-                    2020-01-01 00:00 to 2020-12-31 23:50 UTC, zero duplicate
-                    timestamps and zero gaps on all six turbines. Because a
-                    chronological split allocates only part of this to
-                    training, the training window will span **fewer than 12
-                    months**, which triggers the PROJECT.md §14 seasonal
-                    coverage WARNING. Years 2016–2022 are available from the
-                    same Zenodo record.
-Affected RQ(s):     RQ1 (seasonal covariate shift inflating test residuals —
-                    risk R2), RQ2 (false-alarm behaviour across seasons).
-Mitigation status:  OPEN — acquiring further years is an author decision,
-                    pending before splitting (queue item D-07).
+Description:        Originally recorded when only calendar year 2020 was held
+                    (52,704 rows per turbine, perfectly regular 10-minute
+                    interval, zero duplicates and zero gaps on all six
+                    turbines). Six year-folders 2016–2021 have since been
+                    censused; see LIM-007 for the actual spans, and LIM-005
+                    for the thermal-channel availability that bounds the
+                    usable modelling period.
+Affected RQ(s):     RQ1 (seasonal covariate shift — risk R2), RQ2.
+Mitigation status:  SUPERSEDED by LIM-005 / LIM-007.
+
+## LIM-005 — Gear-oil thermal channels are entirely empty before 2016-05-03
+
+Date discovered:    2026-08-11
+Description:        In the 2016 export the gear-oil thermal channels ("Gear
+                    oil temperature (°C)" and "Gear oil inlet temperature
+                    (°C)") are **100% null from the file start until
+                    2016-05-03 09:40**, on every turbine checked; monthly
+                    non-null fractions for 2016 run 0.000 for January–April,
+                    then 0.892 in May and 0.95–0.99 thereafter. Both channels
+                    go null together in every year, so this is not an artefact
+                    of requiring both.
+                    Consequence measured directly: **780 Stop/Warning rows
+                    across 2016–2021 have zero continuous covered SCADA
+                    immediately preceding them, 731 of them in 2016.** Every
+                    January–February 2016 gearbox-indexed occurrence — code
+                    1510 "Low gearbox oil pressure" (4 occurrences, Kelmarsh
+                    5, incl. the 95.06 h event of 2016-01-28), 1700/1710 "High
+                    temp. gear bearing 1/2" (Kelmarsh 2, 2016-01-29/30), 75
+                    "Reduced power gearbox", 1825 "Overload gear bypass
+                    filter" (6 turbines), 1922 "Particle Gear Alarm 10min" —
+                    records **0.0 h** of preceding covered thermal data.
+Affected RQ(s):     RQ1, RQ2, RQ3; bears directly on D-04 (ground truth) and
+                    D-05 (evaluation design), since an event with no healthy
+                    thermal baseline before it cannot serve as an evaluation
+                    milestone regardless of what it represents.
+Mitigation status:  OPEN — author decision. No inference drawn about what any
+                    of these occurrences represents.
+
+## LIM-006 — Status year-folders overlap at their boundaries
+
+Date discovered:    2026-08-11
+Description:        Status-file time ranges are not confined to their folder's
+                    nominal year: the 2017 folder's rows start 2016-12-17
+                    16:38:07 and the 2021 folder's rows start 2020-06-07
+                    12:20:51. Concatenating folders therefore double-counts
+                    some occurrences. Measured extent: of 282,235 rows,
+                    **213 (turbine, start, code, duration) keys appear more
+                    than once, giving 215 duplicate rows** — 9 keys shared
+                    between the 2020 and 2021 folders, 1 between 2016 and
+                    2017. Long-duration warnings are over-represented among
+                    them (e.g. code 7057 at 5,447.7 h appears in both the 2020
+                    and 2021 folders).
+Affected RQ(s):     RQ2, RQ3 (event counting); any per-year aggregation.
+Mitigation status:  OPEN — de-duplication policy is part of the D-04 ground
+                    truth definition, not applied by the census.
+
+## LIM-007 — Actual holdings span 2016-01-03 to 2021-06-30, unevenly
+
+Date discovered:    2026-08-11
+Description:        Actual SCADA timestamp spans per year-folder (all six
+                    turbines identical within a folder): 2016-01-03 00:00 to
+                    2016-12-31 23:50 (52,416 rows); 2017, 2018, 2019 full
+                    calendar years (52,560 rows each); 2020 full year (52,704
+                    rows); **2021 is a half year — 2021-01-01 00:00 to
+                    2021-06-30 23:50, 26,064 rows.** Thermal-channel non-null
+                    coverage by folder (Kelmarsh 1): 2016 0.655, 2017 0.988,
+                    2018 0.966, 2019 0.954, 2020 0.986, 2021 0.914.
+                    Combined with LIM-005, the period in which gear-oil
+                    thermal data exists at all is 2016-05-03 onward.
+Affected RQ(s):     RQ1 (training-window length and seasonal coverage, §14
+                    WARNING), RQ2.
+Mitigation status:  OPEN — split design is queue item D-07; whether to obtain
+                    the remainder of 2021 (and 2022) from the same Zenodo
+                    record is an author decision.

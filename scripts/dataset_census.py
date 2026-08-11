@@ -99,10 +99,41 @@ def classify(path: Path) -> str:
     return "UNCLASSIFIED_REQUIRES_AUTHOR_DECISION"
 
 
+#: Directory names that are tooling/environment noise rather than dataset
+#: content. Their contents are counted and reported, never itemised.
+SKIPPED_DIR_NAMES = {"__pycache__", "site-packages", "node_modules"}
+
+
+def is_environment_noise(path: Path, folder: Path) -> bool:
+    """True for files under a dot-directory or a known tooling directory."""
+    return any(
+        part.startswith(".") or part in SKIPPED_DIR_NAMES
+        for part in path.relative_to(folder).parts[:-1]
+    )
+
+
+def summarise_skipped(folder: Path) -> dict[str, Any]:
+    """Aggregate (never itemise) files skipped as environment noise."""
+    roots: dict[str, dict[str, int]] = {}
+    for path in folder.rglob("*"):
+        if path.is_file() and is_environment_noise(path, folder):
+            root = path.relative_to(folder).parts[0]
+            entry = roots.setdefault(root, {"n_files": 0, "size_bytes": 0})
+            entry["n_files"] += 1
+            entry["size_bytes"] += path.stat().st_size
+    return {
+        "note": (
+            "Tooling/environment directories present in the folder. Counted for "
+            "completeness; not dataset content, not hashed, not read."
+        ),
+        "directories": roots,
+    }
+
+
 def inventory(folder: Path) -> list[dict[str, Any]]:
     entries = []
     for path in sorted(folder.rglob("*")):
-        if not path.is_file():
+        if not path.is_file() or is_environment_noise(path, folder):
             continue
         classification = classify(path)
         entries.append(
@@ -145,8 +176,9 @@ def header_provenance(path: Path) -> dict[str, Any]:
             if match and declared[key] is None:
                 declared[key] = match.group(1).strip()
     header_prefixed = header_line.startswith("#")
-    columns = list(
-        pd.read_csv(
+    raw_columns = [
+        str(c)
+        for c in pd.read_csv(
             path,
             skiprows=HEADER_COMMENT_LINES,
             nrows=0,
@@ -154,15 +186,18 @@ def header_provenance(path: Path) -> dict[str, Any]:
             encoding="utf-8",
             encoding_errors="replace",
         ).columns
-    )
+    ]
+    columns = list(raw_columns)
     if header_prefixed and columns:
-        columns[0] = re.sub(r"^#\s*", "", str(columns[0]))
+        columns[0] = re.sub(r"^#\s*", "", columns[0])
     return {
         "comment_lines_verbatim": comment_lines,
         "declared": declared,
         "header_row_number_1_indexed": HEADER_COMMENT_LINES + 1,
         "header_row_is_comment_prefixed": header_prefixed,
-        "columns": [str(c) for c in columns],
+        "columns": columns,
+        # As written in the file — what `usecols` must match.
+        "columns_raw": raw_columns,
         "n_columns": len(columns),
     }
 

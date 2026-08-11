@@ -61,7 +61,25 @@ an author definition reads `UNKNOWN — requires confirmation`. Inputs are
 hashed before and after the run and the equality recorded, so read-only
 behaviour is evidenced rather than asserted.
 
-Latest run: [`docs/evidence/KELMARSH_2020_CENSUS.json`](docs/evidence/KELMARSH_2020_CENSUS.json).
+### Complete multi-year status vocabulary
+
+```bash
+uv run --project backend python scripts/status_vocabulary.py \
+  --folder <year folder> --folder <year folder> ... \
+  --output <path outside those folders>/status_vocabulary
+```
+
+Inventories the entire status vocabulary across all supplied year folders.
+**Selection applies no code filter and no keyword filter** — every distinct
+code that appears anywhere is reported, because a gearbox failure may be
+logged in wording containing no gearbox term. A keyword index over the
+finished inventory is provided as a labelled convenience, never as a filter.
+Also reports, per occurrence, how much continuous preceding SCADA data exists
+on the affected turbine with the thermal-candidate channels non-null
+(continuity spans year boundaries). Writes a JSON inventory plus an
+untruncated per-occurrence CSV.
+
+Latest runs are in [`docs/evidence/`](docs/evidence/README.md).
 
 ## Experiment reproduction
 
