@@ -46,6 +46,20 @@ uv run pytest                # tests + coverage
 Pre-commit hooks run the same gates locally: `uv run --project backend pre-commit install`
 (run from the repository root).
 
+## Phase 0.5 dataset census (read-only, facts only)
+
+```bash
+uv run --project backend python scripts/dataset_census.py \
+  --scada <file.csv> --timestamp-column "<raw name>" \
+  --events <status.csv> --event-code-column "<col>" \
+  --assume-timezone <IANA zone> --output census.json
+```
+
+Produces the JSON evidence for `docs/DATASET_DUE_DILIGENCE.md`. It never
+modifies inputs and never infers labels; counting "confirmed gearbox failure
+events" requires author-designated codes (`--gearbox-event-codes`), otherwise
+the field reads `UNKNOWN — requires confirmation`.
+
 ## Experiment reproduction
 
 `python -m app.experiments reproduce EXP-YYYYMMDD-NNN` — arrives with M-31;

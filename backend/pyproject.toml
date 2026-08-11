@@ -27,6 +27,7 @@ dev = [
     "pre-commit>=3.8",
     "import-linter>=2.0",
     "types-PyYAML>=6.0",
+    "pandas-stubs>=2.2",
 ]
 
 [build-system]
@@ -78,6 +79,6 @@ source = ["app"]
 root_package = "app"
 
 [[tool.importlinter.contracts]]
-name = "core is the bottom layer and imports nothing from the application"
+name = "layered architecture (ARCHITECTURE.md §3): higher layers import lower only"
 type = "layers"
-layers = ["app.core"]
+layers = ["app.data", "app.core"]

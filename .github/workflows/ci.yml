@@ -29,10 +29,10 @@ jobs:
         run: uv sync --frozen
 
       - name: Lint (ruff)
-        run: uv run ruff check .
+        run: uv run ruff check . ../scripts
 
       - name: Format check (ruff)
-        run: uv run ruff format --check .
+        run: uv run ruff format --check . ../scripts
 
       - name: Type check (mypy)
         run: uv run mypy

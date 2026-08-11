@@ -1,0 +1,3 @@
+# Root ruff config so files outside backend/ (e.g. scripts/) resolve the same
+# rules as the backend package regardless of invocation directory.
+extend = "backend/pyproject.toml"
