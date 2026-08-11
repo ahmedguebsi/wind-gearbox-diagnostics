@@ -50,15 +50,18 @@ Pre-commit hooks run the same gates locally: `uv run --project backend pre-commi
 
 ```bash
 uv run --project backend python scripts/dataset_census.py \
-  --scada <file.csv> --timestamp-column "<raw name>" \
-  --events <status.csv> --event-code-column "<col>" \
-  --assume-timezone <IANA zone> --output census.json
+  --folder <export folder> --output <path outside that folder>/census.json
 ```
 
-Produces the JSON evidence for `docs/DATASET_DUE_DILIGENCE.md`. It never
-modifies inputs and never infers labels; counting "confirmed gearbox failure
-events" requires author-designated codes (`--gearbox-event-codes`), otherwise
-the field reads `UNKNOWN — requires confirmation`.
+Discovers and classifies every file in the folder (source / excluded-derived /
+unclassified), hashes them all, then censuses only the source CSVs. Facts
+only: no cleaning, no judgment, no inferred labels. Keyword hits are emitted
+as candidates for author review, never as designations, and anything needing
+an author definition reads `UNKNOWN — requires confirmation`. Inputs are
+hashed before and after the run and the equality recorded, so read-only
+behaviour is evidenced rather than asserted.
+
+Latest run: [`docs/evidence/KELMARSH_2020_CENSUS.json`](docs/evidence/KELMARSH_2020_CENSUS.json).
 
 ## Experiment reproduction
 

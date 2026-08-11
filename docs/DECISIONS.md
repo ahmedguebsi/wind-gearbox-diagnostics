@@ -36,33 +36,104 @@ Justification:     —
 Affected modules:  M-19b (normalizers), M-20 (EWMA limits), M-03 (config enum
                    `threshold_stats_source`, default `training` pending closure)
 
-## ADR-002 — Literature-anchored baseline NBM choice
+## ADR-002 — Model set: thesis model and its single baseline
 
-Status:            OPEN
-Question:          Which literature-anchored baseline NBM accompanies Random
-                   Forest as an RQ1 comparator? (PROJECT.md §18; M-17
-                   acceptance 2 requires the rationale and citation recorded
-                   here before M-17 is DONE.)
-Options:           To be enumerated from the SCADA-NBM literature review
-                   (e.g., an ANN-style NBM consistent with established
-                   literature). Deep learning is prohibited (PROJECT.md §39
-                   reference in §5) — the baseline must respect that bound.
-Evidence to close: Thesis literature review; supervisor confirmation.
-Decision:          —
-Justification:     —
-Affected modules:  M-17
+Status:            CLOSED (2026-08-11) — decision queue D-02
+Question:          Which baseline NBM(s) contextualise RQ1 accuracy?
+Options considered: Random Forest + an ANN/ANFIS-style literature baseline
+                   (PROJECT.md §18 as written); a single linear reference.
+Decision:          Author ruling (2026-08-11), REVISED from the proposal.
+                   Exactly TWO models, no multi-model comparison:
+                   - XGBoost multi-target NBM        → model_kind THESIS
+                   - Multiple linear regression on the same exogenous
+                     predictors                       → model_kind BASELINE
+                   Random Forest is dropped. The proposed MLP/ANN baseline is
+                   dropped.
+Justification:     The baseline contextualises RQ1 accuracy: it establishes
+                   how much thermal variance is linear in operating
+                   conditions versus captured non-linearly, and thereby
+                   indicates how much residual spread is irreducible physics
+                   rather than modelling error. It is a measuring stick for
+                   residual trustworthiness, not a model competition. Linear
+                   regression is the minimal reference that does this — no
+                   hyperparameters and no architecture decisions, so nothing
+                   about the comparison is tunable after the fact.
+Why Bangalore & Tjernberg (2015) was NOT reimplemented (examiners may ask):
+                   that paper's ANN NBM is a NARX formulation, feeding lagged
+                   values of the target temperature back as model inputs.
+                   Guard 8 (LOCKED-06) prohibits target-derived features,
+                   because an autoregressive NBM tracks its own target
+                   through slow fault-driven drift and suppresses the very
+                   residual signal this thesis detects — the concern Chapter 2
+                   §2.4 evidences (Felgueira et al., 2019; Wang et al., 2018).
+                   Reimplementing it faithfully would violate the lock;
+                   reimplementing it without the lagged terms would no longer
+                   be that paper's model. It is therefore cited as
+                   motivating precedent, not reproduced as a comparator.
+Deviation noted:   PROJECT.md §18 as written lists Random Forest plus one
+                   literature-anchored baseline. This ruling supersedes that
+                   text. No LOCKED constraint is affected (LOCKED-01 fixes
+                   only that XGBoost is THE thesis model and others are
+                   comparators). Reported to the author, not silently
+                   resolved; PROJECT.md §18 is the author's to amend.
+                   IMPLEMENTATION_PLAN.md M-17 updated accordingly.
+Affected modules:  M-17 (rewritten: one BASELINE, linear regression);
+                   M-16 unchanged; M-28 comparison tables (two models only).
 
 ## ADR-003 — LightGBM as an optional later comparator
 
-Status:            OPEN
-Question:          Is a LightGBM comparator added alongside the mandated
-                   baselines? Permitted only with ADR justification
-                   (PROJECT.md §5). Default position: NOT added.
-Options:           add | omit (default)
-Evidence to close: A demonstrated RQ1 need the existing baselines cannot meet.
-Decision:          —
-Justification:     —
-Affected modules:  M-17 (if added)
+Status:            CLOSED (2026-08-11) — decision queue D-03
+Question:          Is a LightGBM comparator added alongside the baseline?
+                   Permitted only with ADR justification (PROJECT.md §5).
+Options:           add | omit
+Decision:          OMIT (author ruling, 2026-08-11).
+Justification:     Chapters 1–2 identify no RQ1 need the two-model set cannot
+                   meet, and ADR-002 establishes that the baseline exists as
+                   a measuring stick rather than a competition. Adding a
+                   third model would widen the multiple-comparison surface
+                   (risk R9) for no evidential gain.
+Affected modules:  none (M-17 remains a single BASELINE model).
+
+## ADR-008 — Initial FMEA rule base
+
+Status:            CLOSED (2026-08-11) — decision queue D-01
+Question:          Which residual-pattern → candidate-mechanism rules does
+                   the interpretation layer ship with? (PROJECT.md §26;
+                   Chapter 2 §2.7 states Chapter 3 formalises the Table 2.3
+                   signatures into an operational rule base.)
+Decision:          ACCEPTED as proposed (author ruling, 2026-08-11).
+                   Formalise Chapter 2 Table 2.3's five patterns as the
+                   initial YAML rule base, every rule `validated: false`:
+                   1. Gear-teeth wear — sustained positive, load-dependent
+                      oil-temperature residual; bearing residuals rising in
+                      lag (Qiu et al., 2016; Qiu et al., 2014).
+                   2. HSS bearing failure — bearing residual leads; oil
+                      residual smaller and later (Bangalore & Tjernberg,
+                      2015; Qiu et al., 2014).
+                   3. LSS/planetary bearing failure — LSS bearing residual
+                      leading where instrumented, else weak oil-only
+                      signature (Qiu et al., 2014).
+                   4. Lubrication-system degradation — broad simultaneous
+                      positive residuals across oil and bearing channels
+                      (Qiu et al., 2014; Shafiee & Dinmohammadi, 2014).
+                   5. Electrical/generator-side influence — generator-side
+                      residuals without gearbox-led ordering; exclusion
+                      pattern (Qiu et al., 2016).
+Mandatory caveat:  every rule's rationale carries the overlap caveat — three
+                   of five gearbox failure modes share the oil-temperature
+                   signature (Feng et al., 2013) — so differentiation rests
+                   on the coordinated pattern, never a single residual.
+Justification:     Chapter 2 assembles these signatures from published
+                   failure-mode knowledge and drivetrain thermophysics; they
+                   are the literature seed the thesis positions itself on.
+                   `validated: false` until each rule's ADR-005 sign-off
+                   cites its specific source; outputs stay plausibility-
+                   graded hypotheses (Chapter 1 §1.5 scope boundary).
+Affected modules:  M-25 (rule base), M-26 (interpreter).
+Dependency note:   which of the five rules are instantiable depends on the
+                   channels the final dataset provides (census evidence) —
+                   subsetting is a mapping/config matter, not a change to
+                   this decision.
 
 ## ADR-004 — Canonical schema version log
 

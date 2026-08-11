@@ -20,9 +20,15 @@ Evidence tags (exactly one per item):
 
 ---
 
-## Group A — LITERATURE (closable now)
+## Group A — LITERATURE (all CLOSED 2026-08-11)
 
-### D-01 — FMEA rule base contents — VIVA RISK: **High**
+> D-01 ACCEPTED as proposed → ADR-008. D-02 REVISED (two models only:
+> XGBoost THESIS + multiple linear regression BASELINE; Random Forest and
+> the proposed MLP dropped) → ADR-002. D-03 ACCEPTED, omit → ADR-003.
+> The proposal text below is retained as the record of what was put to the
+> author; the authoritative decisions are in docs/DECISIONS.md.
+
+### D-01 — FMEA rule base contents — VIVA RISK: **High** — CLOSED (ADR-008)
 
 - **Decision:** which residual-pattern → candidate-mechanism rules the
   interpretation layer ships with. Referenced: PROJECT.md §26 (M-25, M-26);
@@ -55,7 +61,7 @@ Evidence tags (exactly one per item):
   differentiation rests on the coordinated pattern, and outputs remain
   plausibility-graded hypotheses (Chapter 1 §1.5 scope boundary).
 
-### D-02 — ADR-002: literature-anchored baseline NBM — VIVA RISK: **Medium**
+### D-02 — ADR-002: baseline NBM — VIVA RISK: **Medium** — CLOSED (ADR-002, revised)
 
 - **Decision:** which literature-anchored baseline accompanies Random Forest
   as an RQ1 comparator. Referenced: PROJECT.md §18 (M-17); ADR-002.
@@ -76,7 +82,7 @@ Evidence tags (exactly one per item):
   is the classical ANN of the cited literature, not deep learning, so the
   deep-learning prohibition is not engaged.
 
-### D-03 — ADR-003: LightGBM comparator — VIVA RISK: **Low**
+### D-03 — ADR-003: LightGBM comparator — VIVA RISK: **Low** — CLOSED (omit)
 
 - **Decision:** add a LightGBM comparator or omit. Referenced: PROJECT.md §5
   (M-17, if added); ADR-003.

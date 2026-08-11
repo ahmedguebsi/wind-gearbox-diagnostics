@@ -1,26 +1,25 @@
 """Phase 0.5 dataset census — READ-ONLY, FACTS ONLY (PROJECT.md §7.5).
 
-Produces the JSON evidence for docs/DATASET_DUE_DILIGENCE.md: per-file row
-counts, timestamp behaviour (sampling intervals, irregularities, duplicates,
-DST facts under an explicitly declared assumed timezone), per-column null
-fractions and value ranges, constant and low-variance columns, event-file
-row counts by category, and — only where the author has designated the
-qualifying event codes — the count of confirmed gearbox failure events.
+Discovers and classifies the files in an export folder, then censuses the
+source CSVs. Produces the JSON evidence for docs/DATASET_DUE_DILIGENCE.md.
 
 No cleaning, no judgment, no narrative, no inferred labels. Anything that
 would require a definition the author has not supplied is emitted as
-"UNKNOWN — requires confirmation". Input files are never modified.
+"UNKNOWN — requires confirmation". Keyword hits are emitted as CANDIDATES
+FOR AUTHOR REVIEW, never as designations. Inputs are hashed before and after
+the run and the equality is recorded, so read-only behaviour is evidenced.
 
-Usage (run from the repository root):
+Greenbyte export shape (verified against the file headers, not assumed):
+nine ``#`` comment lines precede the column header on row 10. In
+Turbine_Data files that header row is itself prefixed with ``# ``, so a
+naive ``comment='#'`` read would silently consume the header — this module
+skips exactly nine lines and parses row 10 explicitly. Missing/erroneous
+values are the literal string ``NaN``.
+
+Usage (from the repository root):
 
     uv run --project backend python scripts/dataset_census.py \
-        --scada <scada.csv> [<scada2.csv> ...] --timestamp-column "<raw name>" \
-        [--turbine-column "<raw name>"] [--comment-prefix "#"] \
-        [--assume-timezone Europe/London] \
-        [--events <status.csv> ...] [--event-timestamp-column "<raw name>"] \
-        [--event-category-columns "<col>" ...] [--event-code-column "<col>"] \
-        [--gearbox-event-codes 1510 1800 ...] \
-        --output census.json
+        --folder <export folder> --output census.json
 """
 
 from __future__ import annotations
@@ -30,16 +29,54 @@ import hashlib
 import json
 import re
 import sys
-from datetime import UTC, datetime, timedelta
+from collections import Counter, defaultdict
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import pandas as pd
 
 UNKNOWN = "UNKNOWN — requires confirmation"
 LOW_VARIANCE_STD = 1e-6
-_OFFSET_RE = re.compile(r"(?:[+-]\d{2}:?\d{2}|Z)\s*$")
+HEADER_COMMENT_LINES = 9
+CHUNK_ROWS = 10_000
+MAX_DISTINCT_TRACKED = 200
+
+#: Author-specified keyword flags. Matches are candidates for review only.
+KEYWORDS = (
+    "gearbox",
+    "gear",
+    "oil",
+    "bearing",
+    "lubrication",
+    "replacement",
+    "repair",
+    "service",
+)
+
+#: Free-text status fields to keyword-search and inventory verbatim, where present.
+FREE_TEXT_FIELDS = ("Message", "Comment", "Service comment")
+
+#: Column-name keywords used to group candidate channels. Grouping is a
+#: reading aid; designating which column IS a canonical variable is a
+#: mapping decision (M-07), never a census output.
+THERMAL_TARGET_KEYWORDS = ("gear oil", "gearbox oil", "gear bearing", "gearbox bearing")
+PREDICTOR_KEYWORDS = (
+    "wind speed",
+    "rotor speed",
+    "generator rpm",
+    "gearbox speed",
+    "power",
+    "pitch",
+    "blade angle",
+    "ambient",
+    "nacelle temperature",
+)
+
+
+# --------------------------------------------------------------------------
+# Inventory and provenance
+# --------------------------------------------------------------------------
 
 
 def sha256_of(path: Path) -> str:
@@ -50,288 +87,588 @@ def sha256_of(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _read_csv(path: Path, comment_prefix: str | None) -> tuple[pd.DataFrame, str]:
-    for encoding in ("utf-8", "latin-1"):
-        try:
-            frame = pd.read_csv(path, comment=comment_prefix, low_memory=False, encoding=encoding)
-        except UnicodeDecodeError:
+def classify(path: Path) -> str:
+    """Classify a file by name/extension. Never infers from content."""
+    name, suffix = path.name.lower(), path.suffix.lower()
+    if suffix == ".csv" and name.startswith("turbine_data_"):
+        return "SOURCE_SCADA"
+    if suffix == ".csv" and name.startswith("status_"):
+        return "SOURCE_STATUS"
+    if suffix in {".xlsx", ".xls", ".md", ".py"}:
+        return "EXCLUDED_DERIVED"
+    return "UNCLASSIFIED_REQUIRES_AUTHOR_DECISION"
+
+
+def inventory(folder: Path) -> list[dict[str, Any]]:
+    entries = []
+    for path in sorted(folder.rglob("*")):
+        if not path.is_file():
             continue
-        return frame, encoding
-    raise SystemExit(f"Cannot decode {path} as utf-8 or latin-1")
+        classification = classify(path)
+        entries.append(
+            {
+                "name": str(path.relative_to(folder)),
+                "classification": classification,
+                "sha256": sha256_of(path),
+                "size_bytes": path.stat().st_size,
+                "modified_utc": datetime.fromtimestamp(path.stat().st_mtime, tz=UTC).isoformat(),
+                "content_read_by_census": classification.startswith("SOURCE_"),
+            }
+        )
+    return entries
 
 
-def _column_facts(frame: pd.DataFrame) -> dict[str, Any]:
-    per_column: dict[str, Any] = {}
-    constant: list[str] = []
-    low_variance: list[str] = []
-    n_rows = len(frame)
-    for name in frame.columns:
-        series = frame[name]
-        n_unique = int(series.nunique(dropna=True))
-        facts: dict[str, Any] = {
-            "dtype": str(series.dtype),
-            "null_fraction": round(float(series.isna().mean()) if n_rows else 0.0, 6),
-            "n_unique": n_unique,
-        }
-        if pd.api.types.is_numeric_dtype(series):
-            std = series.std() if n_unique > 0 else None
-            facts["min"] = None if pd.isna(series.min()) else float(series.min())
-            facts["max"] = None if pd.isna(series.max()) else float(series.max())
-            facts["std"] = None if std is None or pd.isna(std) else float(std)
-            if n_unique > 1 and facts["std"] is not None and facts["std"] < LOW_VARIANCE_STD:
-                low_variance.append(str(name))
-        if n_unique <= 1:
-            constant.append(str(name))
-        per_column[str(name)] = facts
+_HEADER_PATTERNS = {
+    "exported_by": re.compile(r"^#\s*(This file was exported.*)$"),
+    "turbine": re.compile(r"^#\s*Turbine:\s*(.*)$"),
+    "turbine_type": re.compile(r"^#\s*Turbine type:\s*(.*)$"),
+    "time_zone": re.compile(r"^#\s*Time zone:\s*(.*)$"),
+    "time_interval": re.compile(r"^#\s*Time interval:\s*(.*)$"),
+    "sum_production": re.compile(r"^#\s*(.*Sum production:.*)$"),
+    "missing_value_note": re.compile(r"^#\s*(Data that is missing.*)$"),
+}
+
+
+def header_provenance(path: Path) -> dict[str, Any]:
+    """Parse the nine leading ``#`` lines and the row-10 column header.
+
+    Every field is reported as *declared by the file*; nothing is assumed.
+    """
+    with path.open("r", encoding="utf-8", errors="replace") as fh:
+        lines = [fh.readline().rstrip("\n") for _ in range(HEADER_COMMENT_LINES + 1)]
+    comment_lines = lines[:HEADER_COMMENT_LINES]
+    header_line = lines[HEADER_COMMENT_LINES]
+    declared: dict[str, Any] = {key: None for key in _HEADER_PATTERNS}
+    for line in comment_lines:
+        for key, pattern in _HEADER_PATTERNS.items():
+            match = pattern.match(line)
+            if match and declared[key] is None:
+                declared[key] = match.group(1).strip()
+    header_prefixed = header_line.startswith("#")
+    columns = list(
+        pd.read_csv(
+            path,
+            skiprows=HEADER_COMMENT_LINES,
+            nrows=0,
+            header=0,
+            encoding="utf-8",
+            encoding_errors="replace",
+        ).columns
+    )
+    if header_prefixed and columns:
+        columns[0] = re.sub(r"^#\s*", "", str(columns[0]))
     return {
-        "per_column": per_column,
-        "constant_columns": constant,
-        "low_variance_columns": low_variance,
-        "criteria": {
-            "constant": "n_unique(dropna) <= 1 (includes all-null columns)",
-            "low_variance": f"numeric std < {LOW_VARIANCE_STD} and not constant",
-        },
+        "comment_lines_verbatim": comment_lines,
+        "declared": declared,
+        "header_row_number_1_indexed": HEADER_COMMENT_LINES + 1,
+        "header_row_is_comment_prefixed": header_prefixed,
+        "columns": [str(c) for c in columns],
+        "n_columns": len(columns),
     }
 
 
-def _timestamp_facts(
-    frame: pd.DataFrame, column: str, assume_timezone: str | None
-) -> dict[str, Any]:
-    if column not in frame.columns:
-        return {"error": f"timestamp column {column!r} not present", "status": UNKNOWN}
-    raw = frame[column].astype("string")
-    parsed = pd.to_datetime(raw, errors="coerce")
-    valid = parsed.dropna().sort_values()
-    sample = raw.dropna().head(100)
-    facts: dict[str, Any] = {
-        "column": column,
-        "unparseable_count": int(parsed.isna().sum() - raw.isna().sum()),
-        "null_count": int(raw.isna().sum()),
-        "min": None if valid.empty else valid.iloc[0].isoformat(),
-        "max": None if valid.empty else valid.iloc[-1].isoformat(),
-        "duplicate_timestamp_count": int(valid.duplicated().sum()),
-        "utc_offset_markers_present_in_raw_strings": bool(
-            sample.map(lambda s: bool(_OFFSET_RE.search(s))).any()
-        ),
+def _strip_header_prefix(frame: pd.DataFrame) -> pd.DataFrame:
+    """Drop the leading ``# `` from the first column name (Turbine_Data files
+    carry their header row as a comment line)."""
+    first = list(frame.columns)[:1]
+    return frame.rename(columns={c: re.sub(r"^#\s*", "", str(c)) for c in first})
+
+
+def _read_source(path: Path, prov: dict[str, Any], **kwargs: Any) -> Any:
+    """Read a source CSV honouring the nine-comment-line header offset.
+
+    With ``chunksize`` this returns a reader; the caller strips the header
+    prefix per chunk via :func:`_strip_header_prefix`.
+    """
+    result = pd.read_csv(
+        path,
+        skiprows=HEADER_COMMENT_LINES,
+        header=0,
+        encoding="utf-8",
+        encoding_errors="replace",
+        **kwargs,
+    )
+    if "chunksize" in kwargs:
+        return result
+    if prov["header_row_is_comment_prefixed"]:
+        result = _strip_header_prefix(result)
+    return result
+
+
+# --------------------------------------------------------------------------
+# Status / event inventory (priority output)
+# --------------------------------------------------------------------------
+
+
+def _parse_duration(value: str) -> pd.Timedelta | None:
+    if value in {"", "-"}:
+        return None
+    try:
+        parsed = pd.to_timedelta(value)
+    except (ValueError, TypeError):
+        return None
+    return None if pd.isna(parsed) else parsed
+
+
+def status_inventory(
+    paths: list[Path], provenance: dict[str, dict[str, Any]]
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
+    """Full status/event inventory. Returns (inventory, keyword_candidates, notes)."""
+    notes: list[str] = []
+    code_stats: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {
+            "messages_verbatim": Counter(),
+            "occurrences": 0,
+            "turbines": set(),
+            "total_duration_seconds": 0.0,
+            "rows_with_duration": 0,
+            "rows_without_duration": 0,
+            "first_occurrence": None,
+            "last_occurrence": None,
+        }
+    )
+    status_values: Counter[str] = Counter()
+    iec_counts: Counter[str] = Counter()
+    iec_duration: dict[str, float] = defaultdict(float)
+    free_text: dict[str, Counter[str]] = {f: Counter() for f in FREE_TEXT_FIELDS}
+    other_categorical: dict[str, Counter[str]] = defaultdict(Counter)
+    completeness = {
+        "timestamp_end": Counter(),
+        "duration": Counter(),
     }
-    if len(valid) >= 2:
-        deltas = valid.diff().dropna()
-        counts = deltas.value_counts().head(5)
-        facts["interval_value_counts_top5"] = {
-            str(interval): int(count) for interval, count in counts.items()
-        }
-        modal = deltas.mode().iloc[0]
-        gaps = deltas[deltas > modal]
-        largest = gaps.sort_values(ascending=False).head(5)
-        facts["modal_interval"] = str(modal)
-        facts["gap_count_above_modal_interval"] = len(gaps)
-        facts["largest_gaps"] = [
-            {"end": valid.loc[idx].isoformat(), "duration": str(gap)}
-            for idx, gap in largest.items()
-        ]
-    facts["dst"] = _dst_facts(valid, assume_timezone)
-    return facts
+    candidates: list[dict[str, Any]] = []
+    header_variants: Counter[str] = Counter()
+    total_rows = 0
+    per_file: list[dict[str, Any]] = []
 
+    for path in paths:
+        prov = provenance[path.name]
+        turbine = prov["declared"].get("turbine") or UNKNOWN
+        # dtype=str + keep_default_na=False preserves "-" and "" exactly as written.
+        frame = _read_source(path, prov, dtype=str, keep_default_na=False)
+        columns = [str(c) for c in frame.columns]
+        header_variants[" | ".join(columns)] += 1
+        total_rows += len(frame)
+        per_file.append(
+            {
+                "file": path.name,
+                "turbine_declared": turbine,
+                "n_rows": len(frame),
+                "columns": columns,
+            }
+        )
 
-def _dst_facts(valid: pd.Series, assume_timezone: str | None) -> dict[str, Any]:
-    if assume_timezone is None:
-        return {
-            "status": UNKNOWN,
-            "note": "no timezone declared; pass --assume-timezone to compute DST facts",
-        }
-    if valid.empty:
-        return {"assumed_timezone": assume_timezone, "transitions_in_range": []}
-    zone = ZoneInfo(assume_timezone)
-    start, end = valid.iloc[0].date(), valid.iloc[-1].date()
-    transitions: list[dict[str, Any]] = []
-    day = start
-    while day < end:
-        noon = datetime(day.year, day.month, day.day, 12, tzinfo=zone)
-        next_noon = noon + timedelta(days=1)
-        off_a, off_b = noon.utcoffset(), next_noon.astimezone(zone).utcoffset()
-        if off_a != off_b:
-            transition_date = next_noon.date()
-            that_day = valid[valid.dt.date == transition_date]
-            transitions.append(
+        for field in ("Timestamp end", "Duration"):
+            key = field.lower().replace(" ", "_")
+            if field in frame.columns:
+                series = frame[field]
+                completeness[key]["populated"] += int((~series.isin(["-", ""])).sum())
+                completeness[key]["blank_dash"] += int((series == "-").sum())
+                completeness[key]["blank_empty"] += int((series == "").sum())
+            else:
+                notes.append(f"{path.name}: column {field!r} absent")
+
+        for row in frame.itertuples(index=False):
+            record = dict(zip(columns, row, strict=False))
+            code = str(record.get("Code", "")).strip()
+            message = str(record.get("Message", ""))
+            start = str(record.get("Timestamp start", ""))
+            duration = _parse_duration(str(record.get("Duration", "")))
+
+            stats = code_stats[code]
+            stats["messages_verbatim"][message] += 1
+            stats["occurrences"] += 1
+            stats["turbines"].add(turbine)
+            if duration is not None:
+                stats["total_duration_seconds"] += duration.total_seconds()
+                stats["rows_with_duration"] += 1
+            else:
+                stats["rows_without_duration"] += 1
+            if start not in {"", "-"}:
+                if stats["first_occurrence"] is None or start < stats["first_occurrence"]:
+                    stats["first_occurrence"] = start
+                if stats["last_occurrence"] is None or start > stats["last_occurrence"]:
+                    stats["last_occurrence"] = start
+
+            status_values[str(record.get("Status", ""))] += 1
+            iec = str(record.get("IEC category", ""))
+            iec_counts[iec] += 1
+            if duration is not None:
+                iec_duration[iec] += duration.total_seconds()
+
+            for field in FREE_TEXT_FIELDS:
+                if field in record:
+                    value = str(record[field]).strip()
+                    if value not in {"", "-"}:
+                        free_text[field][value] += 1
+            for field in ("Service contract category",):
+                if field in record:
+                    other_categorical[field][str(record[field])] += 1
+
+            searched = [f for f in FREE_TEXT_FIELDS if f in record]
+            hits = sorted(
                 {
-                    "date": transition_date.isoformat(),
-                    "offset_before": str(off_a),
-                    "offset_after": str(off_b),
-                    "direction": "forward"
-                    if (off_b or timedelta()) > (off_a or timedelta())
-                    else "backward",
-                    "duplicate_timestamps_that_day": int(that_day.duplicated().sum()),
-                    "rows_that_day": len(that_day),
+                    keyword
+                    for field in searched
+                    for keyword in KEYWORDS
+                    if keyword in str(record[field]).lower()
                 }
             )
-        day = day + timedelta(days=1)
-    return {"assumed_timezone": assume_timezone, "transitions_in_range": transitions}
+            if hits:
+                candidates.append(
+                    {
+                        "file": path.name,
+                        "turbine_declared": turbine,
+                        "matched_keywords": hits,
+                        "matched_fields": [
+                            f for f in searched if any(k in str(record[f]).lower() for k in hits)
+                        ],
+                        "row_verbatim": {k: str(v) for k, v in record.items()},
+                    }
+                )
 
-
-def census_scada(
-    paths: list[Path],
-    timestamp_column: str,
-    turbine_column: str | None,
-    comment_prefix: str | None,
-    assume_timezone: str | None,
-) -> list[dict[str, Any]]:
-    results = []
-    for path in paths:
-        frame, encoding = _read_csv(path, comment_prefix)
-        entry: dict[str, Any] = {
-            "file": path.name,
-            "sha256": sha256_of(path),
-            "encoding_used": encoding,
-            "n_rows": len(frame),
-            "n_columns": int(frame.shape[1]),
-            "timestamps": _timestamp_facts(frame, timestamp_column, assume_timezone),
-        }
-        if turbine_column is not None and turbine_column in frame.columns:
-            counts = frame[turbine_column].value_counts(dropna=False)
-            entry["rows_per_turbine"] = {str(k): int(v) for k, v in counts.items()}
-        elif turbine_column is not None:
-            entry["rows_per_turbine"] = {"error": f"column {turbine_column!r} absent"}
-        else:
-            entry["rows_per_turbine"] = {
-                "note": "no turbine column declared; file treated as one unit"
+    codes_sorted = sorted(
+        (
+            {
+                "code": code,
+                "messages_verbatim": dict(stats["messages_verbatim"]),
+                "occurrences": stats["occurrences"],
+                "turbines_affected": sorted(stats["turbines"]),
+                "n_turbines_affected": len(stats["turbines"]),
+                "total_duration_seconds": round(stats["total_duration_seconds"], 3),
+                "total_duration_hours": round(stats["total_duration_seconds"] / 3600, 3),
+                "rows_with_duration": stats["rows_with_duration"],
+                "rows_without_duration": stats["rows_without_duration"],
+                "first_occurrence": stats["first_occurrence"],
+                "last_occurrence": stats["last_occurrence"],
             }
-        entry.update(_column_facts(frame))
-        results.append(entry)
-    return results
-
-
-def census_events(
-    paths: list[Path],
-    comment_prefix: str | None,
-    timestamp_column: str | None,
-    category_columns: list[str],
-    code_column: str | None,
-) -> list[dict[str, Any]]:
-    results = []
-    for path in paths:
-        frame, encoding = _read_csv(path, comment_prefix)
-        entry: dict[str, Any] = {
-            "file": path.name,
-            "sha256": sha256_of(path),
-            "encoding_used": encoding,
-            "n_rows": len(frame),
-            "columns": [str(c) for c in frame.columns],
-        }
-        if timestamp_column is not None and timestamp_column in frame.columns:
-            parsed = pd.to_datetime(frame[timestamp_column], errors="coerce").dropna()
-            entry["timestamp_range"] = {
-                "column": timestamp_column,
-                "min": None if parsed.empty else parsed.min().isoformat(),
-                "max": None if parsed.empty else parsed.max().isoformat(),
-            }
-        chosen = category_columns or [
-            str(c)
-            for c in frame.columns
-            if frame[c].dtype == object and frame[c].nunique(dropna=True) <= 60
-        ]
-        entry["row_counts_by_category"] = {
-            column: {str(k): int(v) for k, v in frame[column].value_counts(dropna=False).items()}
-            for column in chosen
-            if column in frame.columns
-        }
-        if code_column is not None and code_column in frame.columns:
-            counts = frame[code_column].value_counts(dropna=False).head(500)
-            entry["event_code_counts"] = {str(k): int(v) for k, v in counts.items()}
-        results.append(entry)
-    return results
-
-
-def gearbox_event_count(
-    event_entries: list[dict[str, Any]],
-    event_paths: list[Path],
-    comment_prefix: str | None,
-    code_column: str | None,
-    designated_codes: list[str],
-) -> dict[str, Any]:
-    if not designated_codes or code_column is None:
-        return {
-            "count": UNKNOWN,
-            "note": (
-                "Counting confirmed gearbox failure events requires the author to "
-                "designate qualifying event codes (--gearbox-event-codes with "
-                "--event-code-column). No inference is performed."
-            ),
-        }
-    codes = {str(c) for c in designated_codes}
-    per_file: dict[str, int] = {}
-    total = 0
-    for path in event_paths:
-        frame, _ = _read_csv(path, comment_prefix)
-        if code_column not in frame.columns:
-            per_file[path.name] = -1
-            continue
-        n = int(frame[code_column].astype("string").isin(codes).sum())
-        per_file[path.name] = n
-        total += n
-    return {
-        "author_designated_codes": sorted(codes),
-        "occurrences_per_file": per_file,
-        "total_occurrences": total,
-        "note": (
-            "Occurrences of author-designated codes; whether occurrences constitute "
-            "independent events is a D-04 ground-truth decision, not a script output."
+            for code, stats in code_stats.items()
         ),
+        key=lambda d: d["total_duration_seconds"],
+        reverse=True,
+    )
+
+    free_text_out: dict[str, Any] = {}
+    for field in FREE_TEXT_FIELDS:
+        present = any(field in f["columns"] for f in per_file)
+        free_text_out[field] = {
+            "present_in_files": present,
+            "distinct_non_empty_verbatim": dict(free_text[field].most_common()),
+            "n_distinct_non_empty": len(free_text[field]),
+            "total_non_empty_rows": sum(free_text[field].values()),
+        }
+        if not present:
+            free_text_out[field]["note"] = (
+                f"Column {field!r} does not exist in these status exports — reported "
+                "as absent, not substituted."
+            )
+
+    inventory_out = {
+        "files": per_file,
+        "total_rows": total_rows,
+        "header_variants": dict(header_variants),
+        "codes_by_total_duration_desc": codes_sorted,
+        "n_distinct_codes": len(codes_sorted),
+        "status_values": dict(status_values.most_common()),
+        "iec_categories": {
+            value: {
+                "count": count,
+                "total_duration_hours": round(iec_duration.get(value, 0.0) / 3600, 3),
+            }
+            for value, count in iec_counts.most_common()
+        },
+        "free_text_fields": free_text_out,
+        "other_categorical_fields": {
+            field: dict(counter.most_common()) for field, counter in other_categorical.items()
+        },
+        "completeness": {field: dict(counter) for field, counter in completeness.items()},
     }
+    return inventory_out, candidates, notes
+
+
+# --------------------------------------------------------------------------
+# SCADA census (streamed)
+# --------------------------------------------------------------------------
+
+
+class _ColumnAccumulator:
+    """Streaming per-column facts (Welford chunk-merge for mean/std)."""
+
+    def __init__(self) -> None:
+        self.n_total = 0
+        self.n_null = 0
+        self.numeric = False
+        self.count = 0
+        self.mean = 0.0
+        self.m2 = 0.0
+        self.min: float | None = None
+        self.max: float | None = None
+        self.distinct: set[str] = set()
+        self.distinct_overflow = False
+        self.first_valid: str | None = None
+        self.last_valid: str | None = None
+
+    def update(self, series: pd.Series, timestamps: pd.Series) -> None:
+        self.n_total += len(series)
+        null_mask = series.isna()
+        self.n_null += int(null_mask.sum())
+        valid_times = timestamps[~null_mask.to_numpy()]
+        if len(valid_times):
+            first, last = str(valid_times.iloc[0]), str(valid_times.iloc[-1])
+            self.first_valid = first if self.first_valid is None else min(self.first_valid, first)
+            self.last_valid = last if self.last_valid is None else max(self.last_valid, last)
+        clean = series.dropna()
+        if pd.api.types.is_numeric_dtype(series):
+            self.numeric = True
+            if clean.empty:
+                return
+            n_b = len(clean)
+            mean_b = float(clean.mean())
+            m2_b = float(((clean - mean_b) ** 2).sum())
+            if self.count == 0:
+                self.count, self.mean, self.m2 = n_b, mean_b, m2_b
+            else:
+                delta = mean_b - self.mean
+                total = self.count + n_b
+                self.m2 += m2_b + delta * delta * self.count * n_b / total
+                self.mean += delta * n_b / total
+                self.count = total
+            lo, hi = float(clean.min()), float(clean.max())
+            self.min = lo if self.min is None else min(self.min, lo)
+            self.max = hi if self.max is None else max(self.max, hi)
+        elif not self.distinct_overflow:
+            for value in clean.astype(str).unique():
+                self.distinct.add(value)
+                if len(self.distinct) > MAX_DISTINCT_TRACKED:
+                    self.distinct_overflow = True
+                    break
+
+    def facts(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "null_fraction": round(self.n_null / self.n_total, 6) if self.n_total else 0.0,
+            "n_non_null": self.n_total - self.n_null,
+            "first_non_null_timestamp": self.first_valid,
+            "last_non_null_timestamp": self.last_valid,
+        }
+        if self.numeric:
+            std = (self.m2 / (self.count - 1)) ** 0.5 if self.count > 1 else None
+            out.update(
+                {
+                    "kind": "numeric",
+                    "min": self.min,
+                    "max": self.max,
+                    "mean": round(self.mean, 6) if self.count else None,
+                    "std": round(std, 9) if std is not None else None,
+                }
+            )
+            out["constant"] = bool(self.count and self.min == self.max)
+            out["low_variance"] = bool(
+                not out["constant"] and std is not None and std < LOW_VARIANCE_STD
+            )
+        else:
+            out.update(
+                {
+                    "kind": "non_numeric",
+                    "n_distinct_tracked": len(self.distinct),
+                    "distinct_truncated": self.distinct_overflow,
+                    "constant": bool(not self.distinct_overflow and len(self.distinct) <= 1),
+                    "low_variance": False,
+                }
+            )
+        return out
+
+
+def _channel_candidates(columns: list[str], keywords: tuple[str, ...]) -> list[str]:
+    return [c for c in columns if any(k in c.lower() for k in keywords)]
+
+
+def scada_census(
+    paths: list[Path], provenance: dict[str, dict[str, Any]], timestamp_column: str
+) -> list[dict[str, Any]]:
+    results = []
+    for path in paths:
+        prov = provenance[path.name]
+        accumulators: dict[str, _ColumnAccumulator] = defaultdict(_ColumnAccumulator)
+        timestamps: list[pd.Series] = []
+        n_rows = 0
+        reader = _read_source(path, prov, chunksize=CHUNK_ROWS, low_memory=False)
+        for raw_chunk in reader:
+            chunk = (
+                _strip_header_prefix(raw_chunk)
+                if prov["header_row_is_comment_prefixed"]
+                else raw_chunk
+            )
+            n_rows += len(chunk)
+            ts = pd.to_datetime(chunk[timestamp_column], errors="coerce")
+            timestamps.append(ts)
+            for column in chunk.columns:
+                accumulators[str(column)].update(chunk[column], ts)
+        all_ts = pd.concat(timestamps).sort_values() if timestamps else pd.Series(dtype=object)
+        valid = all_ts.dropna()
+
+        ts_facts: dict[str, Any] = {
+            "column": timestamp_column,
+            "unparseable_count": int(all_ts.isna().sum()),
+            "min": None if valid.empty else valid.iloc[0].isoformat(),
+            "max": None if valid.empty else valid.iloc[-1].isoformat(),
+            "duplicate_timestamp_count": int(valid.duplicated().sum()),
+        }
+        if len(valid) >= 2:
+            deltas = valid.diff().dropna()
+            modal = deltas.mode().iloc[0]
+            irregular = deltas[deltas != modal]
+            ts_facts["modal_interval"] = str(modal)
+            ts_facts["interval_value_counts_top10"] = {
+                str(k): int(v) for k, v in deltas.value_counts().head(10).items()
+            }
+            ts_facts["irregular_interval_count"] = len(irregular)
+            gaps = deltas[deltas > modal]
+            ts_facts["gap_count_above_modal_interval"] = len(gaps)
+            ts_facts["largest_gaps"] = [
+                {"ends_at": valid.loc[idx].isoformat(), "duration": str(gap)}
+                for idx, gap in gaps.sort_values(ascending=False).head(10).items()
+            ]
+
+        columns = [str(c) for c in accumulators]
+        per_column = {name: acc.facts() for name, acc in accumulators.items()}
+        results.append(
+            {
+                "file": path.name,
+                "turbine_declared": prov["declared"].get("turbine") or UNKNOWN,
+                "turbine_type_declared": prov["declared"].get("turbine_type") or UNKNOWN,
+                "time_zone_declared": prov["declared"].get("time_zone") or UNKNOWN,
+                "time_interval_declared": prov["declared"].get("time_interval") or UNKNOWN,
+                "n_rows": n_rows,
+                "n_columns": len(columns),
+                "timestamps": ts_facts,
+                "dst": {
+                    "status": "not applicable — file header declares UTC",
+                    "declared_time_zone": prov["declared"].get("time_zone") or UNKNOWN,
+                    "source": "file header comment line (declared, not assumed)",
+                },
+                "per_column": per_column,
+                "constant_columns": sorted(c for c, f in per_column.items() if f.get("constant")),
+                "low_variance_columns": sorted(
+                    c for c, f in per_column.items() if f.get("low_variance")
+                ),
+                "channel_candidates": {
+                    "note": (
+                        "Name-keyword groupings to aid review. Designating which column "
+                        "IS a canonical variable is a mapping decision (M-07), not a "
+                        "census output."
+                    ),
+                    "thermal_target_candidates": {
+                        c: per_column[c]
+                        for c in _channel_candidates(columns, THERMAL_TARGET_KEYWORDS)
+                    },
+                    "upstream_predictor_candidates": {
+                        c: per_column[c] for c in _channel_candidates(columns, PREDICTOR_KEYWORDS)
+                    },
+                },
+            }
+        )
+    return results
+
+
+# --------------------------------------------------------------------------
+# Entry point
+# --------------------------------------------------------------------------
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--scada", nargs="*", default=[], help="SCADA CSV files")
-    parser.add_argument("--timestamp-column", default=None)
-    parser.add_argument("--turbine-column", default=None)
-    parser.add_argument("--comment-prefix", default=None)
-    parser.add_argument("--assume-timezone", default=None)
-    parser.add_argument("--events", nargs="*", default=[], help="Event/status CSV files")
-    parser.add_argument("--event-timestamp-column", default=None)
-    parser.add_argument("--event-category-columns", nargs="*", default=[])
-    parser.add_argument("--event-code-column", default=None)
-    parser.add_argument("--gearbox-event-codes", nargs="*", default=[])
+    parser.add_argument("--folder", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument(
+        "--scada-timestamp-column",
+        default="Date and time",
+        help="Column header (row 10) holding the SCADA timestamp",
+    )
+    parser.add_argument("--skip-scada", action="store_true", help="Status inventory only")
     args = parser.parse_args(argv)
 
-    scada_paths = [Path(p) for p in args.scada]
-    event_paths = [Path(p) for p in args.events]
-    if scada_paths and args.timestamp_column is None:
-        parser.error("--timestamp-column is required when --scada files are given")
+    folder = Path(args.folder)
+    if not folder.is_dir():
+        parser.error(f"{folder} is not a directory")
+    output_path = Path(args.output).resolve()
+    if folder.resolve() in output_path.parents:
+        parser.error(
+            "--output must not be inside --folder: writing the census into the "
+            "censused folder would modify it and make the inventory self-referential"
+        )
 
-    scada = census_scada(
-        scada_paths,
-        args.timestamp_column or "",
-        args.turbine_column,
-        args.comment_prefix,
-        args.assume_timezone,
+    files = inventory(folder)
+    by_class: dict[str, list[Path]] = defaultdict(list)
+    for entry in files:
+        by_class[entry["classification"]].append(folder / entry["name"])
+
+    source_paths = by_class["SOURCE_SCADA"] + by_class["SOURCE_STATUS"]
+    provenance = {p.name: header_provenance(p) for p in source_paths}
+
+    status_out, candidates, notes = status_inventory(by_class["SOURCE_STATUS"], provenance)
+    scada_out = (
+        []
+        if args.skip_scada
+        else scada_census(by_class["SOURCE_SCADA"], provenance, args.scada_timestamp_column)
     )
-    events = census_events(
-        event_paths,
-        args.comment_prefix,
-        args.event_timestamp_column,
-        args.event_category_columns,
-        args.event_code_column,
-    )
-    report = {
+
+    declared_zones = {name: prov["declared"].get("time_zone") for name, prov in provenance.items()}
+    report: dict[str, Any] = {
         "banner": (
-            "PHASE 0.5 DATASET CENSUS — FACTS ONLY. No cleaning, no judgment, "
-            "no narrative, no inferred labels. Read-only over its inputs."
+            "PHASE 0.5 DATASET CENSUS — FACTS ONLY. No cleaning, no judgment, no "
+            "narrative, no inferred labels. Read-only over its inputs. Keyword hits "
+            "are CANDIDATES FOR AUTHOR REVIEW, not designations."
         ),
         "generated_at_utc": datetime.now(tz=UTC).isoformat(),
-        "arguments": {k: v for k, v in vars(args).items()},
-        "scada_files": scada,
-        "event_files": events,
-        "confirmed_gearbox_failure_events": gearbox_event_count(
-            events,
-            event_paths,
-            args.comment_prefix,
-            args.event_code_column,
-            args.gearbox_event_codes,
-        ),
+        "folder": str(folder),
+        "inventory": files,
+        "unclassified_requiring_author_decision": [
+            e["name"]
+            for e in files
+            if e["classification"] == "UNCLASSIFIED_REQUIRES_AUTHOR_DECISION"
+        ],
+        "timezone": {
+            "declared_per_file": declared_zones,
+            "distinct_declared_values": sorted({z for z in declared_zones.values() if z}),
+            "source": "Greenbyte header comment line 5 of each file (declared, not assumed)",
+        },
+        "header_provenance": provenance,
+        "status_inventory": status_out,
+        "keyword_candidates": {
+            "note": (
+                "CANDIDATES FOR AUTHOR REVIEW — not designations. No inference, "
+                "ranking, or interpretation is applied."
+            ),
+            "keywords": list(KEYWORDS),
+            "fields_searched": list(FREE_TEXT_FIELDS),
+            "n_matching_rows": len(candidates),
+            "matches": candidates,
+            "truncated": False,
+        },
+        "scada_census": scada_out,
+        "coverage_note": {
+            "years_held": ["2020"],
+            "months": 12,
+            "note": (
+                "Twelve months only — on the seasonal-coverage warning boundary in "
+                "PROJECT.md §14 (WARNING is emitted when the training window spans "
+                "< 12 months; a 12-month total means the training split will be "
+                "shorter than 12 months). Years 2016-2022 are available from the same "
+                "Zenodo record. Acquiring further years is an author decision, "
+                "pending before splitting."
+            ),
+        },
+        "census_notes": notes,
     }
-    Path(args.output).write_text(json.dumps(report, indent=2), encoding="utf-8")
-    print(f"Census written to {args.output}")
+
+    after = {e["name"]: sha256_of(folder / e["name"]) for e in files}
+    report["read_only_verification"] = {
+        "inputs_unchanged": all(e["sha256"] == after[e["name"]] for e in files),
+        "method": "SHA-256 of every inventoried file compared before and after the run",
+    }
+
+    output_path.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+    print(f"Census written to {output_path}")
     return 0
 
 
