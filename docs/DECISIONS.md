@@ -82,3 +82,39 @@ Question:          Standing record of FMEA rule validations (Guard 7). A rule's
                    Never invent references.
 Entries:           none yet
 Affected modules:  M-25, M-26
+
+## ADR-006 — Chapter 1 Objective 2 conflict (MAPE + SHAP)
+
+Status:            CLOSED (2026-08-11)
+Question:          Chapter 1 as drafted (Objective 2) names MAPE among the NBM
+                   accuracy metrics and SHAP-based explainability for physical
+                   credibility. Both conflict with PROJECT.md v2.0 (§19 metric
+                   set; LOCKED-07 SHAP prohibition).
+Options:           follow Chapter 1 as drafted | follow LOCKED-01…10
+Decision:          PROJECT.md v2.0 LOCKED-01…10 is authoritative (author
+                   ruling, 2026-08-11). Chapter 1 predates the panel review;
+                   its Objective 2 wording will be corrected by the author
+                   separately. All code and specs build against the locks:
+                   - Metrics: RMSE, MAE, R², bias. NO MAPE anywhere (M-18
+                     acceptance criteria stand: MetricSet exposes exactly
+                     these four fields).
+                   - NO SHAP, no XAI, no attribution module, no shap
+                     dependency. Physical credibility comes from causal
+                     predictor separation (M-14) and condition-sliced error
+                     diagnostics (M-18).
+                   - RQ1 model is multi-target XGBoost (M-16).
+                   - RQ2 comparisons route through matched-FPR only (M-23).
+Justification:     Celsius is an interval scale, so MAPE has no meaningful
+                   zero; SHAP explains the prediction, not the residual, and
+                   the residual is the diagnostic signal. Chapter 2's own
+                   review supports the SHAP exclusion: attribution identifies
+                   influential inputs, not physical mechanisms.
+Affected modules:  M-14, M-16, M-18, M-23
+Process note:      Thesis chapters are never edited, rewritten, or patched
+                   from this repository. Chapter/spec conflicts are logged
+                   here and reported — never silently resolved (PROJECT.md
+                   preamble; LOCKED-09 register discipline applies to all
+                   user-facing text).
+Source text read:  "Chapter 1 Introduction.docx" (SHA-256 prefix c01b9cc5d268,
+                   2026-07-27) — identical copies in Thesis\Code and
+                   Thesis\AI project files\Chapter 1 papers.
