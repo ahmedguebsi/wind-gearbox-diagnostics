@@ -70,7 +70,7 @@ Status:            OPEN (standing log)
 Question:          Standing record of `schema_version` bumps (semver) required
                    by PROJECT.md §8. Each schema change appends an entry here
                    with its rationale.
-Current version:   1.0.0 (initial; to be stamped by M-06 when implemented)
+Current version:   1.0.0 (initial; stamped by M-06 `app/data/schema.py`)
 Affected modules:  M-06, M-07, M-29
 
 ## ADR-005 — FMEA rule sign-off log
@@ -118,3 +118,28 @@ Process note:      Thesis chapters are never edited, rewritten, or patched
 Source text read:  "Chapter 1 Introduction.docx" (SHA-256 prefix c01b9cc5d268,
                    2026-07-27) — identical copies in Thesis\Code and
                    Thesis\AI project files\Chapter 1 papers.
+
+## ADR-007 — Canonical thesis source files
+
+Status:            CLOSED (2026-08-11)
+Question:          Multiple copies/variants of Chapters 1 and 2 existed with
+                   misleading names ("updated", "FINAL_integrated"). Which
+                   files are the canonical thesis text for all software and
+                   requirements work?
+Decision:          Author confirmation (2026-08-11). Canonical files:
+                   - Chapter 1: "Chapter 1 Introduction.docx" (2026-07-27)
+                     SHA-256 c01b9cc5d268684100095f069ad97953
+                             f0ad57b511a2a3fd9840ab029a846da4
+                   - Chapter 2: "Chapter_2_draft.docx" (2026-07-29 20:47)
+                     SHA-256 6510fa47df560b3870f141deb1935a01
+                             eabb5f5f695afa7819fc7fb991e4ddfb
+                   "Chapter1_updated_sections.docx" and
+                   "Chapter_2_FINAL_integrated.docx" are OLDER variants being
+                   archived by the author — do not read them again.
+Justification:     Hash comparison showed the Thesis\Code and AI-project-file
+                   copies of each canonical file are byte-identical; the
+                   misleadingly named variants predate them.
+Affected:          docs/THESIS_REQUIREMENTS.md source references; any future
+                   chapter reading. Chapter 3 does not exist yet; its
+                   decision content is tracked in
+                   docs/CHAPTER3_DECISION_QUEUE.md.

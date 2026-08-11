@@ -121,17 +121,17 @@ risk-priority knowledge is subjective; SCADA ground truth cannot confirm
 mechanisms → plausibility-only evaluation (§3 scope boundary); rules ship
 `validated: false` until the ADR-005 sign-off cites the specific source.
 
-## 8. UNKNOWN — blocked on Chapter 3 (methodology)
+## 8. Open decisions (Chapter 3: unwritten vs undecided)
 
-- The five-phase methodology structure and per-phase specifics (Ch1 §1.6
-  references it; text not yet available)
-- Final healthy-state exclusion values (provisional in config until §27.3
-  sensitivity + Ch3 justification)
-- Chronological split periods / fractions for thesis experiments
-- EWMA λ and control-limit choices and their Ch3 justification
-- Normalization statistics source — ADR-001 remains OPEN
-- The operational FMEA rule base content and thresholds (Ch2 Table 2.3 is the
-  seed; Ch3 "formalises these implied signatures into an operational rule
-  base" per Ch2 §2.7)
-- Event-matching windows and ground-truth tier definitions
-- Dataset selection and census values (Phase 0.5 gate, also blocking)
+Chapter 3 does not exist yet, and its blocking content is the **decisions**
+it must state, not the prose. Those decisions are enumerated in
+[CHAPTER3_DECISION_QUEUE.md](CHAPTER3_DECISION_QUEUE.md) (D-01…D-14),
+grouped by the evidence that closes each (LITERATURE / CENSUS / EXPERIMENT)
+and sorted by viva risk, with the queue's stop condition stated at its top.
+
+Undecided ≠ unwritten: everything in §§1–7 above is already fixed by
+Chapters 1–2 and the PROJECT.md locks; only queue items remain open.
+Provisional parameters keep their PROJECT.md values with markers intact
+until the author closes the corresponding item in docs/DECISIONS.md. The
+five-phase methodology narrative itself (Chapter 1 §1.6 reference) remains
+unwritten but adds no software requirement beyond the queued decisions.
