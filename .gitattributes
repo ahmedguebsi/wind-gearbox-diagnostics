@@ -1,0 +1,5 @@
+# Normalize to LF in repo and working copy — identical bytes on the Windows
+# dev machine and the Linux CI runner.
+* text=auto eol=lf
+*.png binary
+*.parquet binary

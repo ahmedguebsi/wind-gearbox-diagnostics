@@ -1,0 +1,27 @@
+# Example experiment configuration (all values shown are the defaults).
+# Omitted keys are materialized from defaults at load time; every experiment
+# stores its fully resolved config.yaml in its artifact directory, so this
+# file never needs to be complete.
+#
+# Values marked provisional (PROJECT.md §13, §23) are defended only through
+# the sensitivity analysis phase (§27.3); the resolved output lists them
+# under `provisional_parameters`.
+
+logging:
+  level: INFO
+  json_console: false
+
+healthy_state:
+  exclude_alarm_periods: true
+  fault_pre_exclusion_days: 30        # provisional
+  maintenance_post_exclusion_days: 2  # provisional
+  minimum_active_power_kw: 50.0       # provisional
+
+residual:
+  normalization: mad                  # sigma | mad | percentile | condition_binned
+  threshold_stats_source: training    # OPEN ADR-001 (docs/DECISIONS.md): training | validation
+
+detection:
+  method: ewma                        # PRIMARY (LOCKED-02); the only admissible value today
+  ewma_lambda: 0.2                    # provisional
+  control_limit_sigma: 3.0            # provisional

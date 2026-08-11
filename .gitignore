@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Environments
+.venv/
+.env
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Experiment artifacts (evidence lives in files, but not in git; see PROJECT.md §15)
+artifacts/
+
+# SCADA data: raw files are never committed (provenance-hashed at ingestion,
+# see PROJECT.md §10); processed Parquet is regenerable.
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# OS noise
+Thumbs.db
+.DS_Store
