@@ -208,7 +208,7 @@ Status:            OPEN (standing log)
 Question:          Standing record of `schema_version` bumps (semver) required
                    by PROJECT.md §8. Each schema change appends an entry here
                    with its rationale.
-Current version:   1.1.0 (stamped by M-06 `app/data/schema.py`)
+Current version:   1.2.0 (stamped by M-06 `app/data/schema.py`)
 Version log:
   - 1.0.0 (2026-08-11) initial canonical schema: structural variables, the
     thesis-identified upstream predictors, and the two required thermal
@@ -218,6 +218,13 @@ Version log:
     variable itself rather than duplicated inside the validation layer.
     Minor bump: additive, no variable renamed or removed. Detected by the
     pinned schema-hash drift test, which is what that test exists for.
+  - 1.2.0 (2026-08-12) recorded the ADR-012 target designation in the
+    variable descriptions: `gearbox_bearing_temperature` is the rear
+    (high-speed-shaft-side) gearbox bearing — the raw Kelmarsh column
+    assignment lives in the M-07 mapping config, never in the schema — and
+    `gearbox_oil_temperature` notes the ADR-012 exclusion of oil-inlet
+    temperature as a target. Minor bump: descriptive only, no variable
+    renamed, added, or removed.
 Affected modules:  M-06, M-07, M-10 (RangeRule reads bounds from the schema),
                    M-29
 
@@ -291,3 +298,131 @@ Affected:          docs/THESIS_REQUIREMENTS.md source references; any future
                    chapter reading. Chapter 3 does not exist yet; its
                    decision content is tracked in
                    docs/CHAPTER3_DECISION_QUEUE.md.
+
+## ADR-012 — Thermal target designation: bearing channel and oil-inlet exclusion
+
+Status:            CLOSED (2026-08-12) — resolves LIM-001
+Question:          Which physical channels are the two required thermal
+                   targets (PROJECT.md §8), given that no Kelmarsh column is
+                   named as a gearbox bearing temperature (LIM-001)?
+Options:           Bearing target: Rear bearing temperature | Front bearing
+                   temperature | Rotor bearing temp. Oil side: sump oil only
+                   | sump oil + oil inlet.
+Decision:          Author ruling (2026-08-12). The two targets are:
+                   - gearbox_oil_temperature     ← "Gear oil temperature"
+                   - gearbox_bearing_temperature ← "Rear bearing temperature"
+Justification:     The power-bin correlation structure, not the overall
+                   correlation, is the deciding evidence
+                   (docs/evidence/EVIDENCE_D04_AND_TARGETS.json). Rear
+                   bearing maintains 0.88–0.98 correlation with gear oil
+                   across every power bin. Front bearing collapses from 0.99
+                   at idle to 0.06 above 1500 kW — at rated power, where
+                   gearbox thermal faults matter most, it carries essentially
+                   no relationship to oil temperature and is evidently
+                   measuring a different thermal node.
+                   Gear oil inlet temperature is EXCLUDED as a target: it
+                   correlates −0.42 with active power and falls monotonically
+                   from 53.4 °C to 39.3 °C as load rises while sump oil stays
+                   flat — a cooling-system response, not gearbox thermal
+                   state, moving inversely to the quantity of interest. It is
+                   not setpoint-controlled, but is disqualified on physical
+                   grounds.
+Affected modules:  M-06 (schema 1.2.0 designation notes — see ADR-004 log),
+                   M-07 (the Kelmarsh mapping config assigns the designated
+                   raw columns when authored), M-16/M-17 (target set),
+                   M-22 (coordinated state vector), M-25 (rule signatures).
+LIM-001:           mitigation status updated to MITIGATED.
+
+## ADR-013 — Ground-truth definition and tiering
+
+Status:            CLOSED (2026-08-12) — decision queue D-04
+Question:          What counts as a labelled gearbox event, and how is
+                   anomaly-detection ground truth separated from
+                   mechanism-level ground truth? (PROJECT.md §27.1, §7.5;
+                   queue D-04.)
+Options:           status-code-derived events only; status codes qualified by
+                   duration/severity criteria; maintenance-confirmed events
+                   only; two-tier structure per record type.
+Decision:          Author ruling (2026-08-12).
+                   (a) Events are STATUS-CODE-DERIVED, qualified by duration
+                       and preceding-thermal-coverage criteria.
+                   (b) Tier: ALARM-LEVEL ONLY throughout. This dataset
+                       contains no maintenance-confirmed events (LIM-002), so
+                       mechanism-level ground truth is unavailable and no
+                       claim of confirmed failure appears anywhere in the
+                       evidence chain.
+                   (c) Designated event: EVENT-001 — code 1860 "Oil filter
+                       gear choked", Kelmarsh 1, 2019-02-24 16:46:28 to
+                       2019-05-30 07:34:04. ONE event, not three: the
+                       occurrences are separated by 4.9 and 7.45 days across
+                       a 95-day span with the alarm active ~82 days — a
+                       single continuous degradation episode with brief
+                       clearances.
+                   (d) All other gearbox-indexed candidates are EXCLUDED for
+                       zero preceding thermal coverage (LIM-005): the
+                       gear-oil channels are empty before 2016-05-03 and
+                       every 2016 gearbox occurrence falls inside that
+                       window.
+Justification:     LIM-002 (no maintenance free text anywhere in the
+                   exports), LIM-003 (sparse gearbox-code coverage), LIM-005
+                   (zero preceding thermal coverage for the 2016 candidates),
+                   and the occurrence structure recorded in
+                   docs/evidence/EVIDENCE_D04_AND_TARGETS.json. Recorded
+                   BEFORE any model was fitted.
+Consistency:       ADR-010 stands — the chronological split places EVENT-001
+                   in TEST. Its scope note ("what 1860 represents remains
+                   open under D-04") is resolved by this entry: code 1860 is
+                   and remains a filter-restriction alarm; the ground-truth
+                   tier is alarm-level, never mechanism-level.
+Affected modules:  M-24 (tier tags — alarm-level is the only reachable tier
+                   for this dataset), M-27 (event set), M-13 (split
+                   constraint via ADR-010); unblocks D-05 and D-06.
+
+## ADR-014 — Evaluation design: DESCRIPTIVE CASE STUDY
+
+Status:            CLOSED (2026-08-12) — decision queue D-05
+Question:          The pre-committed Phase 0.5 decision rule (PROJECT.md
+                   §7.5, §27.2): ≥2 independent labelled gearbox events →
+                   quantitative event-based evaluation; <2 → descriptive
+                   case-study design.
+Decision:          ONE labelled event (EVENT-001, ADR-013) < 2, so the rule
+                   selects the DESCRIPTIVE branch (author ruling,
+                   2026-08-12). `inferential_allowed = false` in M-27. No
+                   inferential detection-rate or lead-time population claims
+                   anywhere in the thesis evidence chain.
+                   The matched-FPR operating curves on healthy data (M-23)
+                   remain fully quantitative and are the primary RQ2
+                   evidence; EVENT-001 is the qualitative case study,
+                   structured by the matched-FPR framework per PROJECT.md
+                   §25.
+                   Case-study analysis focuses on the ONSET of occurrence 1;
+                   occurrences 2–3 are reported as continuation, not as
+                   independent evidence (occurrence 3 coincides with abnormal
+                   operation — LIM-008).
+Justification:     The decision rule was fixed in PROJECT.md §7.5 before any
+                   results existed; the census event count selects the branch
+                   mechanically. Closing this BEFORE any model is fitted is
+                   the entire point of the Phase 0.5 gate.
+Affected modules:  M-27 (`inferential_allowed` gating), M-23 (curves remain
+                   quantitative), M-28 (claim phrasing in tables),
+                   LIMITATIONS.md (LIM-008 small-n / data-quality entries).
+
+## ADR-015 — Phase 0.5 dataset due-diligence gate: APPROVED
+
+Status:            CLOSED (2026-08-12)
+Question:          May modelling-adjacent work (healthy-state construction
+                   onward) proceed past the Phase 0.5 gate (PROJECT.md §7.5)?
+Decision:          APPROVED by the author (2026-08-12).
+Justification:     The census is complete and its evidence is on file
+                   (docs/evidence/KELMARSH_2020_CENSUS.json,
+                   KELMARSH_STATUS_VOCABULARY_2016_2021.json,
+                   EVIDENCE_D04_AND_TARGETS.json); D-04 and D-05 are closed
+                   with recorded justifications (ADR-013, ADR-014); and the
+                   evaluation design was pre-committed before any model was
+                   fitted, which is what the gate exists to guarantee. The
+                   modelling data span is fixed by ADR-009 (2016-05-03 to
+                   2021-06-30, all six turbines; the pre-May-2016 exclusion
+                   is a stated data constraint, not a selection).
+Affected modules:  the block on modelling-adjacent work is lifted; build
+                   proceeds M-14 → M-29/M-30/M-31 → M-15…M-20 per
+                   IMPLEMENTATION_PLAN.md §22.

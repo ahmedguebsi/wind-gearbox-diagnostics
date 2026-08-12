@@ -48,9 +48,11 @@ Description:        In the Kelmarsh 2020 SCADA export (299 columns, all six
 Affected RQ(s):     RQ1, RQ2 (coordinated multi-target analysis presumes two
                     thermal targets), RQ3 (Table 2.3 patterns 2 and 3 rely on
                     a bearing residual).
-Mitigation status:  OPEN — author designation required. Until then the M-06
-                    schema is left unchanged (changing it to match the data
-                    would resolve a spec/data conflict silently).
+Mitigation status:  MITIGATED (2026-08-12, ADR-012: the author designated
+                    "Rear bearing temperature" as `gearbox_bearing_temperature`
+                    on power-bin correlation evidence; schema 1.2.0 records
+                    the designation, the M-07 mapping config assigns the raw
+                    column).
 
 ## LIM-002 — No maintenance free text in the status export
 
@@ -65,9 +67,11 @@ Description:        Across all 57,515 status rows from the six 2020 status
                     no free-text maintenance or repair evidence.
 Affected RQ(s):     RQ2, RQ3 (mechanism-level ground truth); bears directly
                     on queue item D-04.
-Mitigation status:  OPEN — reinforces the Chapter 1 §1.5 scope boundary that
-                    mechanism-level interpretations can be assessed for
-                    plausibility only.
+Mitigation status:  ACCEPTED (2026-08-12, ADR-013: ground truth is
+                    alarm-level ONLY for this dataset; mechanism-level
+                    interpretations remain plausibility-graded hypotheses per
+                    the Chapter 1 §1.5 scope boundary — the constraint stands
+                    and is stated in the thesis).
 
 ## LIM-003 — Sparse event duration and gearbox-code coverage in 2020
 
@@ -86,8 +90,11 @@ Description:        (a) Only 8,094 of 57,515 status rows (14.1%) carry a
                     "Hydraulic oil flushing operation" (47 rows, 6 turbines).
 Affected RQ(s):     RQ2, RQ3; bears on D-04 (ground truth) and D-05 (whether
                     the ≥2-event quantitative branch is reachable).
-Mitigation status:  OPEN — event definition and counting are author
-                    decisions; no inference drawn here.
+Mitigation status:  ACCEPTED (2026-08-12, ADR-013/ADR-014: the event
+                    definition is closed — one labelled event, EVENT-001 —
+                    and the pre-committed rule selects the descriptive
+                    case-study design; no inferential detection-rate or
+                    lead-time claims).
 
 ## LIM-004 — Coverage span (superseded in part by LIM-007)
 
@@ -127,8 +134,11 @@ Affected RQ(s):     RQ1, RQ2, RQ3; bears directly on D-04 (ground truth) and
                     D-05 (evaluation design), since an event with no healthy
                     thermal baseline before it cannot serve as an evaluation
                     milestone regardless of what it represents.
-Mitigation status:  OPEN — author decision. No inference drawn about what any
-                    of these occurrences represents.
+Mitigation status:  ACCEPTED (2026-08-12, ADR-013: candidates with zero
+                    preceding thermal coverage are excluded from the
+                    ground-truth event set; the modelling span starts
+                    2016-05-03 per ADR-009 — a stated data constraint, not a
+                    selection).
 
 ## LIM-006 — Status year-folders overlap at their boundaries
 
@@ -145,8 +155,10 @@ Description:        Status-file time ranges are not confined to their folder's
                     them (e.g. code 7057 at 5,447.7 h appears in both the 2020
                     and 2021 folders).
 Affected RQ(s):     RQ2, RQ3 (event counting); any per-year aggregation.
-Mitigation status:  OPEN — de-duplication policy is part of the D-04 ground
-                    truth definition, not applied by the census.
+Mitigation status:  MITIGATED (M-09 ingestion deduplicates concatenated files
+                    on (turbine, timestamp, code) with content-hash
+                    verification and raises on conflicting duplicates;
+                    ADR-013 closes the event definition the policy feeds).
 
 ## LIM-007 — Actual holdings span 2016-01-03 to 2021-06-30, unevenly
 
@@ -166,3 +178,36 @@ Affected RQ(s):     RQ1 (training-window length and seasonal coverage, §14
 Mitigation status:  OPEN — split design is queue item D-07; whether to obtain
                     the remainder of 2021 (and 2022) from the same Zenodo
                     record is an author decision.
+
+## LIM-008 — EVENT-001 occurrence 3 coincides with abnormal operation
+
+Date discovered:    2026-08-12
+Description:        Within EVENT-001 (ADR-013: code 1860 "Oil filter gear
+                    choked", Kelmarsh 1, 2019-02-24 to 2019-05-30), the third
+                    occurrence has 27.1% null SCADA rows and a mean active
+                    power of 375 kW, against 743 kW and 804 kW during
+                    occurrences 1 and 2 — by the third occurrence the turbine
+                    was operating abnormally, so its thermal record is not
+                    comparable to the onset period.
+Affected RQ(s):     RQ2, RQ3 (case-study evidence quality).
+Mitigation status:  MITIGATED (ADR-014: case-study analysis focuses on the
+                    onset of occurrence 1; occurrences 2–3 are reported as
+                    continuation of the same episode, not as independent
+                    evidence).
+Source:             docs/evidence/EVIDENCE_D04_AND_TARGETS.json; author
+                    ruling 2026-08-12.
+
+## LIM-009 — CI gates have never run (no GitHub remote)
+
+Date discovered:    2026-08-12
+Description:        The repository has no GitHub remote, so the M-36 CI
+                    pipeline (ruff, mypy, import-direction contract, pytest,
+                    fixture reproduction — PROJECT.md §7, §32) has never
+                    executed. All gates currently run locally only, which
+                    leaves risk R10 (results irreproducible at write-up)
+                    partially unmitigated: no clean-runner verification of
+                    `git clone → uv sync → pytest` has ever happened.
+Affected RQ(s):     none directly; reproducibility of every result (risk R10).
+Mitigation status:  OPEN — create the GitHub remote and enable Actions before
+                    headline experiments are run.
+Source:             manual (author-flagged, 2026-08-12).

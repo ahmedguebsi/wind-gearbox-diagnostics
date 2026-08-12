@@ -95,9 +95,19 @@ Evidence tags (exactly one per item):
 
 ---
 
-## Group B — CENSUS (needs Phase 0.5 output; left open, no values assigned)
+## Group B — CENSUS (D-04, D-05 CLOSED 2026-08-12; D-06, D-07 remain open)
 
-### D-04 — Ground-truth definition and tiering — VIVA RISK: **High**
+> D-04 CLOSED → ADR-013: status-code-derived events qualified by duration
+> and preceding-thermal-coverage; tier ALARM-LEVEL ONLY; EVENT-001 (code
+> 1860, Kelmarsh 1, 2019) is the single labelled event. D-05 CLOSED →
+> ADR-014: one event < 2, so the pre-committed rule selects the DESCRIPTIVE
+> case-study branch (`inferential_allowed = false`). The author's separate
+> target-designation decision is ADR-012 (Rear bearing temperature is the
+> bearing target; oil inlet excluded). Phase 0.5 gate APPROVED → ADR-015.
+> The proposal text below is retained as the record of what was put to the
+> author; the authoritative decisions are in docs/DECISIONS.md.
+
+### D-04 — Ground-truth definition and tiering — VIVA RISK: **High** — CLOSED (ADR-013)
 
 - **Decision:** what counts as a labelled gearbox event, and how
   anomaly-detection ground truth is separated from mechanism-level ground
@@ -112,7 +122,7 @@ Evidence tags (exactly one per item):
 - **Blocked until closed:** M-24 tier tags, D-05, D-06, event evaluation
   (M-27), the honest phrasing of every detection claim.
 
-### D-05 — Evaluation design: quantitative vs descriptive — VIVA RISK: **High**
+### D-05 — Evaluation design: quantitative vs descriptive — VIVA RISK: **High** — CLOSED (ADR-014)
 
 - **Decision:** the pre-committed Phase 0.5 decision rule outcome — ≥2
   independent labelled gearbox events → quantitative event-based evaluation;

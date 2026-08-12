@@ -20,9 +20,11 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from app.core.errors import SchemaError
 
 #: Current canonical schema version (semver). Bump via ADR-004 only.
-#: 1.1.0 — added `plausible_range` to CanonicalVariable so physical bounds
-#: are declared with the variable rather than duplicated in validation.
-SCHEMA_VERSION = "1.1.0"
+#: 1.2.0 — recorded the ADR-012 target designation in variable descriptions:
+#: the bearing target is the rear (HSS-side) gearbox bearing; oil-inlet
+#: temperature is excluded as a target. Raw-column assignment stays in the
+#: M-07 mapping config.
+SCHEMA_VERSION = "1.2.0"
 
 _SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
@@ -208,12 +210,23 @@ def default_schema() -> CanonicalSchema:
             name=GEARBOX_OIL_TEMPERATURE,
             role=VariableRole.TARGET,
             unit=celsius,
+            description=(
+                "Gearbox sump oil temperature. ADR-012 excludes oil-INLET "
+                "temperature as a target: it is a cooling-circuit response "
+                "moving inversely with load, not gearbox thermal state."
+            ),
             plausible_range=(-90.0, 200.0),
         ),
         CanonicalVariable(
             name=GEARBOX_BEARING_TEMPERATURE,
             role=VariableRole.TARGET,
             unit=celsius,
+            description=(
+                "Designated per ADR-012: the rear (high-speed-shaft-side) "
+                "gearbox bearing, which holds 0.88-0.98 correlation with "
+                "sump oil across every power bin. The raw-column assignment "
+                "lives in the M-07 mapping config."
+            ),
             plausible_range=(-90.0, 250.0),
         ),
     )
