@@ -1,0 +1,122 @@
+# Initial FMEA rule base (M-25; ADR-008, closing decision queue D-01).
+#
+# Chapter 2 Table 2.3's five residual-pattern -> candidate-mechanism
+# signatures, formalised as the literature seed. EVERY rule is
+# validated: false — the flag flips only through a docs/DECISIONS.md
+# ADR-005 sign-off citing the specific literature source (PROJECT.md §26;
+# Guard 7). Sources below are the citations RECORDED IN ADR-008, not new
+# references.
+#
+# Mandatory caveat (ADR-008): every rule's rationale carries the overlap
+# caveat — three of five gearbox failure modes share the oil-temperature
+# signature (Feng et al., 2013) — so differentiation rests on the
+# coordinated pattern, never a single residual. Loading REJECTS a rule
+# whose rationale omits it.
+#
+# Temporal qualifiers (lead/lag/sustained) are carried as `qualifiers`
+# text: they inform the operator view and the thesis narrative, and are
+# NOT mechanically matched by the instantaneous coordinated-state match —
+# stated here so the limitation is explicit, not silent.
+
+ruleset_version: 1.0.0
+
+rules:
+  - id: FMEA-001
+    mechanism: gear_teeth_wear
+    residual_pattern:
+      gearbox_oil_temperature: { state: high }
+      gearbox_bearing_temperature: { state: any }
+    qualifiers:
+      - sustained positive, load-dependent oil-temperature residual
+      - bearing residuals rising in lag behind oil
+    confidence: preliminary
+    rationale: >
+      Gear-teeth wear raises churning and friction losses that heat the
+      sump oil first, with bearing temperatures rising in lag (Qiu et al.,
+      2016; Qiu et al., 2014). Overlap caveat: three of five gearbox
+      failure modes share the oil-temperature signature (Feng et al.,
+      2013), so differentiation rests on the coordinated pattern, never a
+      single residual.
+    source: "Qiu et al. (2016); Qiu et al. (2014) — as recorded in ADR-008"
+    validated: false
+
+  - id: FMEA-002
+    mechanism: hss_bearing_failure
+    residual_pattern:
+      gearbox_bearing_temperature: { state: high }
+      gearbox_oil_temperature: { state: any }
+    qualifiers:
+      - bearing-temperature residual leads
+      - oil residual smaller and later
+    confidence: preliminary
+    rationale: >
+      High-speed-shaft bearing degradation heats the bearing node first;
+      the oil residual is smaller and later (Bangalore & Tjernberg, 2015;
+      Qiu et al., 2014). Overlap caveat: three of five gearbox failure
+      modes share the oil-temperature signature (Feng et al., 2013), so
+      differentiation rests on the coordinated pattern, never a single
+      residual.
+    source: "Bangalore & Tjernberg (2015); Qiu et al. (2014) — as recorded in ADR-008"
+    validated: false
+
+  - id: FMEA-003
+    mechanism: lss_planetary_bearing_failure
+    residual_pattern:
+      gearbox_oil_temperature: { state: high }
+      gearbox_bearing_temperature: { state: normal }
+    qualifiers:
+      - LSS bearing residual leading where instrumented
+      - weak oil-only signature otherwise (the LSS/planetary bearing is not
+        instrumented in this dataset — LIM-001/ADR-012, so the weak
+        oil-only form applies)
+    confidence: preliminary
+    rationale: >
+      Low-speed-shaft/planetary bearing degradation shows a leading LSS
+      bearing residual where instrumented, otherwise only a weak oil-only
+      signature (Qiu et al., 2014). Overlap caveat: three of five gearbox
+      failure modes share the oil-temperature signature (Feng et al.,
+      2013), so differentiation rests on the coordinated pattern, never a
+      single residual.
+    source: "Qiu et al. (2014) — as recorded in ADR-008"
+    validated: false
+
+  - id: FMEA-004
+    mechanism: lubrication_system_degradation
+    residual_pattern:
+      gearbox_oil_temperature: { state: high }
+      gearbox_bearing_temperature: { state: high }
+    qualifiers:
+      - broad simultaneous positive residuals across oil and bearing channels
+    confidence: preliminary
+    rationale: >
+      Degraded lubrication (flow restriction, cooler fouling, oil ageing)
+      reduces heat removal everywhere at once, producing broad simultaneous
+      positive residuals across oil and bearing channels (Qiu et al., 2014;
+      Shafiee & Dinmohammadi, 2014). Overlap caveat: three of five gearbox
+      failure modes share the oil-temperature signature (Feng et al.,
+      2013), so differentiation rests on the coordinated pattern, never a
+      single residual.
+    source: "Qiu et al. (2014); Shafiee & Dinmohammadi (2014) — as recorded in ADR-008"
+    validated: false
+
+  - id: FMEA-005
+    mechanism: electrical_generator_side_influence
+    residual_pattern:
+      generator_bearing_front_temperature: { state: high }
+      generator_bearing_rear_temperature: { state: high }
+      gearbox_oil_temperature: { state: normal }
+    qualifiers:
+      - generator-side residuals without gearbox-led ordering
+      - exclusion pattern — argues AGAINST a gearbox mechanism
+      - not instantiable until generator-side residual channels are modelled
+        (ADR-008 dependency note; current targets are the two ADR-012
+        gearbox channels)
+    confidence: preliminary
+    rationale: >
+      Generator-side thermal deviations without gearbox-led ordering point
+      away from the gearbox — an exclusion pattern (Qiu et al., 2016).
+      Overlap caveat: three of five gearbox failure modes share the
+      oil-temperature signature (Feng et al., 2013), so differentiation
+      rests on the coordinated pattern, never a single residual.
+    source: "Qiu et al. (2016) — as recorded in ADR-008"
+    validated: false

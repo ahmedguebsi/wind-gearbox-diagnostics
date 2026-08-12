@@ -85,4 +85,4 @@ root_package = "app"
 [[tool.importlinter.contracts]]
 name = "layered architecture (ARCHITECTURE.md §3): higher layers import lower only"
 type = "layers"
-layers = ["app.experiments", "app.detection", "app.residuals", "app.models", "app.data", "app.core"]
+layers = ["app.experiments", "app.evaluation", "app.fmea", "app.detection", "app.residuals", "app.models", "app.data", "app.core"]
