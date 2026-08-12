@@ -122,10 +122,15 @@ class TestFitChokepoint:
         fit_model(Recorder(), _full_frame(50), feature, SCHEMA, seed=7)
         assert calls == ["validate", "fit"]
 
-    def test_no_fit_calls_outside_models_package(self):
+    def test_no_model_fit_calls_outside_models_package(self):
         """M-15 acceptance 1 (meta-test): every other layer goes through
-        ``fit_model``; only the models package may call ``.fit(`` on
-        anything."""
+        ``fit_model``. An NBM fit is recognizable statically: the protocol
+        requires the keyword-only ``seed`` argument, and conventionally the
+        receiver is named *model*. Residual-layer ``fit`` contracts
+        (normalizers, EWMA limits) take a PartitionRef instead and are
+        guarded by their own chokepoint (Guard 4) — they are not model
+        training. The dynamic spy test above enforces the chokepoint at
+        runtime regardless of naming."""
         app_root = Path(base_module.__file__).resolve().parents[1]
         offenders: list[str] = []
         for py_file in app_root.rglob("*.py"):
@@ -133,13 +138,22 @@ class TestFitChokepoint:
                 continue
             tree = ast.parse(py_file.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
-                if (
+                if not (
                     isinstance(node, ast.Call)
                     and isinstance(node.func, ast.Attribute)
                     and node.func.attr == "fit"
                 ):
+                    continue
+                has_seed_kwarg = any(kw.arg == "seed" for kw in node.keywords)
+                receiver = node.func.value
+                receiver_name = ""
+                if isinstance(receiver, ast.Name):
+                    receiver_name = receiver.id
+                elif isinstance(receiver, ast.Attribute):
+                    receiver_name = receiver.attr
+                if has_seed_kwarg or "model" in receiver_name.lower():
                     offenders.append(f"{py_file.name}:{node.lineno}")
-        assert offenders == [], f".fit() calls outside the chokepoint: {offenders}"
+        assert offenders == [], f"model .fit() calls outside the chokepoint: {offenders}"
 
 
 class TestXGBoostNBM:
