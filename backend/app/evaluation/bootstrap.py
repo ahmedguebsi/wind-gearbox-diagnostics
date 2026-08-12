@@ -110,11 +110,12 @@ class BlockedBootstrap:
         rng = np.random.default_rng(self.seed)
         n_blocks = math.ceil(n / self.block_length)
         max_start = n - self.block_length + 1
+        offsets = np.arange(self.block_length)
         replicates = np.empty(self.n_boot, dtype=float)
         for i in range(self.n_boot):
             starts = rng.integers(0, max_start, size=n_blocks)
-            resample = np.concatenate([series[s : s + self.block_length] for s in starts])[:n]
-            replicates[i] = statistic(resample)
+            indices = (starts[:, None] + offsets).ravel()[:n]
+            replicates[i] = statistic(series[indices])
         alpha = (1.0 - confidence) / 2.0
         lower, upper = np.quantile(replicates, [alpha, 1.0 - alpha])
         return ConfidenceInterval(
