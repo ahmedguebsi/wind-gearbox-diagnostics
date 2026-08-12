@@ -13,20 +13,20 @@ data/
 └── processed/  # Parquet outputs, regenerable, provenance-chained; not in git
 ```
 
-## Candidate dataset (pending Phase 0.5 due diligence)
+## Dataset (Phase 0.5 due diligence complete — docs/DATASET_DUE_DILIGENCE.md)
 
 | Field | Value |
 |-------|-------|
-| Name | Kelmarsh wind farm SCADA + status logs (6 turbines) |
-| Years sighted | 2016 (SCADA + status logs), 2020 (SCADA) |
-| Sampling | 10-minute SCADA; event-timestamped status logs |
-| Source / supplier | **TO BE CONFIRMED** (files currently in user's local Downloads; formal origin, DOI/URL, and version required) |
-| Licence / redistribution | **TO BE CONFIRMED** before any data is committed or published |
-| Source timezone | **TO BE CONFIRMED** — ingestion stops and asks; never guessed (PROJECT.md §8) |
+| Name | Kelmarsh wind farm SCADA + status logs (6 × Senvion MM92) |
+| Holdings censused | Year folders 2016–2021 (2021 is a half year); modelling span 2016-05-03 to 2021-06-30 (ADR-009) |
+| Sampling | 10-minute SCADA; event-timestamped status logs (to the second) |
+| Source / supplier | Cubico Sustainable Investments Ltd, published on Zenodo — DOI [10.5281/zenodo.5841833](https://doi.org/10.5281/zenodo.5841833) (all-versions DOI, resolves to latest; author-confirmed 2026-08-12) |
+| Licence / redistribution | **CC-BY-4.0** (author-confirmed 2026-08-12) |
+| Source timezone | UTC, declared in every file's Greenbyte header (census `KELMARSH_2020_CENSUS.json → timezone`; declared, not assumed) |
 
 The formal census (turbines, durations, channels, event counts, timezone/DST
-behaviour, quality issues, licensing) belongs in
-`docs/DATASET_DUE_DILIGENCE.md` and gates all modelling work (PROJECT.md §7.5).
+behaviour, quality issues, licensing) is `docs/DATASET_DUE_DILIGENCE.md`;
+the Phase 0.5 gate was approved 2026-08-12 (ADR-015).
 
 ## Per-file provenance record (captured at ingestion, M-08)
 

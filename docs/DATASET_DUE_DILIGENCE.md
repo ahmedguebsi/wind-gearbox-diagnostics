@@ -206,14 +206,16 @@ The living register is `docs/LIMITATIONS.md`; census-derived entries:
 
 ## 11. Licensing / redistribution conditions
 
-**NOT ESTABLISHED BY THE CENSUS — OPEN ITEM.** The census read local copies
-under the author's Downloads folder; no DOI, licence file, or redistribution
-statement was among the censused files. `data/README.md` records supplier,
-licence, and formal origin as TO BE CONFIRMED. LIM-007 refers to obtaining
-further data from "the same Zenodo record", but the specific record, DOI,
-and licence must be confirmed by the author before the thesis
-data-availability statement is written. Raw data is never committed to this
-repository (provenance hashes only, PROJECT.md §10).
+**Kelmarsh wind farm data, Cubico Sustainable Investments Ltd, published on
+Zenodo: DOI 10.5281/zenodo.5841833 (all-versions DOI, resolves to the
+latest version), licence CC-BY-4.0.** Confirmed by the author 2026-08-12 —
+this is the one field in this document that comes from author confirmation
+rather than the census artifacts, because the censused local copies carried
+no licence file (the census read folders under the author's Downloads).
+CC-BY-4.0 permits use and redistribution with attribution; the thesis
+data-availability statement can cite the DOI directly. Raw data is still
+never committed to this repository (provenance hashes only, PROJECT.md
+§10).
 
 ---
 

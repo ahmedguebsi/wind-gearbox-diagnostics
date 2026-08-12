@@ -426,3 +426,49 @@ Justification:     The census is complete and its evidence is on file
 Affected modules:  the block on modelling-adjacent work is lifted; build
                    proceeds M-14 → M-29/M-30/M-31 → M-15…M-20 per
                    IMPLEMENTATION_PLAN.md §22.
+
+## ADR-016 — RQ2 success criterion, pre-specified
+
+Status:            CLOSED (2026-08-12) — recorded BEFORE any matched-FPR
+                   comparison output exists (M-23 is built; no comparison
+                   has been run on real data).
+Question:          By what pre-committed criterion is the coordinated
+                   multi-target pipeline judged to provide more useful
+                   diagnostic evidence than single-signal monitoring (RQ2,
+                   PROJECT.md §25)? Unspecified until now; an examiner will
+                   ask which criterion was committed in advance.
+Decision:          Author ruling (2026-08-12).
+                   PRIMARY criterion (quantitative, healthy data only):
+                   at matched false-alarm operating points across the swept
+                   range, the coordinated pipeline is considered to provide
+                   more informative diagnostic evidence if it produces
+                   fewer isolated single-signal excursions while retaining
+                   equivalent sensitivity to sustained coordinated
+                   deviations. Reported as FULL operating curves (M-23
+                   already refuses to emit matched points without them),
+                   never a single point.
+                   SECONDARY criterion (descriptive, EVENT-001 only):
+                   whether the coordinated pipeline's first persistent
+                   exceedance precedes the code-1860 alarm, and by how much
+                   — reported as two timestamps and their difference. A
+                   factual observation about one episode, not a capability
+                   claim. `inferential_allowed` remains false per ADR-014.
+                   EXPLICITLY NOT CRITERIA (deliberate, dated exclusions —
+                   not gaps): detection rate across events, and mean lead
+                   time. Both require multiple independent labelled events
+                   and are unavailable in this dataset (ADR-013: the
+                   labelled event set is exactly {EVENT-001}; ADR-014
+                   selected the descriptive branch accordingly).
+Justification:     Pre-specifying the success criterion before any
+                   comparison output exists is what makes the RQ2 answer
+                   evidence rather than post-hoc selection — the same
+                   discipline the Phase 0.5 gate applied to the evaluation
+                   design (ADR-014). The primary criterion is measurable on
+                   healthy data alone, so it stays fully quantitative under
+                   the descriptive-branch constraint; the secondary
+                   criterion is scoped to what one episode can honestly
+                   support.
+Affected modules:  M-23 (comparison outputs are judged against this
+                   criterion; full curves mandatory), M-27 (EVENT-001
+                   timestamps; `inferential_allowed` gating), M-28 (claim
+                   phrasing in tables), thesis Chapters 3 and 5.
