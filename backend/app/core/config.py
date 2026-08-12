@@ -96,6 +96,23 @@ class HealthyStateConfig(StrictModel):
     )
 
 
+class ModelConfig(StrictModel):
+    """NBM configuration (PROJECT.md §18).
+
+    The thesis model is fixed (LOCKED-01): ``name`` resolves through the
+    model registry, which contains exactly the ADR-002 two-model set. The
+    baseline has nothing to configure — ``include_baseline`` only controls
+    whether it is fitted alongside the thesis model for RQ1 context.
+    """
+
+    name: str = "xgboost_multi_target"
+    hyperparameters: dict[str, Any] = Field(default_factory=dict)
+    multi_output: bool = True
+    include_baseline: bool = True
+    #: Seed for every stochastic model component; recorded per PROJECT.md §15.
+    seed: int = 42
+
+
 class ResidualConfig(StrictModel):
     """Residual normalization configuration (PROJECT.md §22)."""
 
@@ -115,6 +132,8 @@ class DetectionConfig(StrictModel):
     method: Literal["ewma"] = "ewma"
     ewma_lambda: float = provisional_field(0.2, "EWMA smoothing constant λ", gt=0.0, le=1.0)
     control_limit_sigma: float = provisional_field(3.0, "Control-limit multiplier", gt=0.0)
+    #: D-10 keeps the formulation open; both branches exist as configuration.
+    control_limit_formulation: Literal["steady_state", "time_varying"] = "steady_state"
 
 
 class AppConfig(StrictModel):
@@ -123,6 +142,7 @@ class AppConfig(StrictModel):
 
     logging: LoggingConfig = LoggingConfig()
     healthy_state: HealthyStateConfig = HealthyStateConfig()
+    model: ModelConfig = ModelConfig()
     residual: ResidualConfig = ResidualConfig()
     detection: DetectionConfig = DetectionConfig()
 

@@ -40,3 +40,14 @@ def resolve(name: str) -> ModelRegistration:
 def registered() -> dict[str, ModelRegistration]:
     """A copy of the registry (read-only view for meta-tests and tables)."""
     return dict(_REGISTRY)
+
+
+def create(name: str, **kwargs: object) -> NormalBehaviourModel:
+    """Instantiate a registered model, passing construction kwargs when the
+    class accepts them. The baseline takes none by design (ADR-002: nothing
+    tunable), so kwargs fall away for it."""
+    cls = resolve(name).cls
+    try:
+        return cls(**kwargs)
+    except TypeError:
+        return cls()

@@ -1,10 +1,9 @@
 # CI gates (PROJECT.md §7, §32; IMPLEMENTATION_PLAN.md M-36).
 # A red pipeline blocks merging. Gates: lint, format, types, import contract,
-# full test suite.
-#
-# TODO(M-31): add the fixture-reproduction gate once the `reproduce` command
-# exists — `python -m app.experiments reproduce <fixture-exp>` must report
-# EXACT MATCH on predictions (PROJECT.md §15, §32).
+# full test suite — which INCLUDES the M-31 fixture-reproduction gate:
+# tests/test_experiments.py::TestReproduce runs a fixture experiment through
+# `reproduce` and requires EXACT MATCH on metrics and predictions
+# (PROJECT.md §15, §32).
 name: CI
 
 on:

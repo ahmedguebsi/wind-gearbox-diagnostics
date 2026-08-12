@@ -11,6 +11,7 @@ fixture experiment on every push and requires EXACT MATCH.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import date
 from enum import StrEnum
@@ -80,6 +81,7 @@ def reproduce(
 
     diffs: list[str] = []
     tolerance_used = _diff_values("metrics", stored_metrics, result.metrics, float_tolerance, diffs)
+    _diff_predictions(store, experiment_id, result.predictions, diffs)
     if diffs:
         status = ReproductionStatus.MISMATCH
     elif tolerance_used:
@@ -92,6 +94,25 @@ def reproduce(
         environment_warnings=warnings,
         diffs=diffs,
     )
+
+
+def _diff_predictions(
+    store: ArtifactStore,
+    experiment_id: str,
+    regenerated: dict[str, pd.DataFrame],
+    diffs: list[str],
+) -> None:
+    """Predictions require EXACT frame equality (M-31 acceptance 1)."""
+    predictions_dir = store.experiment_dir(experiment_id) / "predictions"
+    stored_keys = {p.stem for p in predictions_dir.glob("*.parquet")}
+    for missing in sorted(stored_keys - set(regenerated)):
+        diffs.append(f"predictions.{missing}: absent in regenerated run")
+    for extra in sorted(set(regenerated) - stored_keys):
+        diffs.append(f"predictions.{extra}: absent in stored artifacts")
+    for key in sorted(stored_keys & set(regenerated)):
+        stored_frame = pd.read_parquet(predictions_dir / f"{key}.parquet")
+        if not stored_frame.equals(regenerated[key]):
+            diffs.append(f"predictions.{key}: regenerated predictions differ from stored")
 
 
 def _environment_warnings(record: ExperimentRecord) -> list[str]:
@@ -193,6 +214,8 @@ def _diff_values(
         and isinstance(regenerated, int | float)
         and not isinstance(regenerated, bool)
     ):
+        if math.isnan(stored) and isinstance(regenerated, float) and math.isnan(regenerated):
+            return False
         if stored == regenerated:
             return False
         scale = max(abs(stored), abs(float(regenerated)), 1.0)
