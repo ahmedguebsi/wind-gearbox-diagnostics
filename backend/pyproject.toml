@@ -66,6 +66,10 @@ plugins = ["pydantic.mypy"]
 module = "tests.*"
 disallow_untyped_defs = false
 
+[[tool.mypy.overrides]]
+module = ["sklearn.*", "joblib.*", "xgboost.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=app --cov-report=term-missing"
@@ -81,4 +85,4 @@ root_package = "app"
 [[tool.importlinter.contracts]]
 name = "layered architecture (ARCHITECTURE.md §3): higher layers import lower only"
 type = "layers"
-layers = ["app.experiments", "app.data", "app.core"]
+layers = ["app.experiments", "app.models", "app.data", "app.core"]
