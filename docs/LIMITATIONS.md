@@ -208,9 +208,15 @@ Description:        The repository has no GitHub remote, so the M-36 CI
                     partially unmitigated: no clean-runner verification of
                     `git clone → uv sync → pytest` has ever happened.
 Affected RQ(s):     none directly; reproducibility of every result (risk R10).
-Mitigation status:  OPEN — create the GitHub remote and enable Actions before
-                    headline experiments are run.
-Source:             manual (author-flagged, 2026-08-12).
+Mitigation status:  MITIGATED (2026-08-12). Remote created
+                    (github.com/khedhrimokhles1997-sudo/wind-gearbox-diagnostics,
+                    private) and CI confirmed green on a clean runner — all
+                    five gates (ruff check, ruff format, mypy, import-linter,
+                    pytest incl. the M-31 fixture-reproduction test) passed:
+                    https://github.com/khedhrimokhles1997-sudo/wind-gearbox-diagnostics/actions/runs/31623910742
+                    (author-confirmed conclusion: Success).
+Source:             manual (author-flagged, 2026-08-12); Actions run
+                    31623910742.
 
 ## LIM-010 — Icing events 9 days before EVENT-001 onset (known confounder)
 

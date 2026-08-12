@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,29 @@ from app.core.time import get_zone
 from app.data.schema import SCHEMA_VERSION, CanonicalSchema, VariableRole
 
 _logger = get_logger("data.mapping")
+
+
+class FilenamePattern(BaseModel):
+    """Turbine identity derived from the source filename (per-turbine export
+    files with no turbine column inside). ``pattern`` is a regex with at
+    least one capture group; ``template`` expands the match (re backrefs) to
+    the turbine identifier, so file naming like ``..._Kelmarsh_1_...`` can
+    yield the identifier "Kelmarsh 1" used by status records."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    pattern: str
+    template: str = r"\1"
+
+    def extract(self, filename: str) -> str:
+        match = re.search(self.pattern, filename)
+        if match is None:
+            raise SchemaError(
+                "Filename does not match the declared turbine pattern",
+                filename=filename,
+                pattern=self.pattern,
+            )
+        return match.expand(self.template)
 
 
 class DatasetSection(BaseModel):
@@ -57,6 +81,9 @@ class DatasetSection(BaseModel):
     source_timezone: str
     turbine_column: str | None = None
     turbine_id_constant: str | None = None
+    #: Third turbine-identity mode: per-turbine export files named by
+    #: turbine, with no turbine column inside (e.g. the Kelmarsh exports).
+    turbine_id_from_filename: FilenamePattern | None = None
     #: Lines to skip before the header row (e.g. vendor comment banner).
     skip_lines: int = 0
     #: Prefix to strip from the first header cell when the header row is
@@ -64,6 +91,10 @@ class DatasetSection(BaseModel):
     header_comment_prefix: str | None = None
     #: Literal strings that denote missing/erroneous values.
     missing_value_tokens: tuple[str, ...] = ("NaN",)
+    #: Declared source encoding. When set, ingestion reads with EXACTLY this
+    #: encoding (a mismatch fails loudly); when None, strict detection
+    #: applies. Silent character replacement stays prohibited either way.
+    encoding: str | None = None
 
 
 class ColumnSpec(BaseModel):
@@ -93,12 +124,20 @@ class ColumnMapping(BaseModel):
         payload = json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
-    def to_canonical(self, raw_frame: pd.DataFrame, schema: CanonicalSchema) -> pd.DataFrame:
+    def to_canonical(
+        self,
+        raw_frame: pd.DataFrame,
+        schema: CanonicalSchema,
+        *,
+        turbine_id: str | None = None,
+    ) -> pd.DataFrame:
         """Return a new frame with canonical column names (pre-UTC).
 
         The source frame is never modified. Raw columns not named in the
         mapping are not carried into the canonical frame. Missing declared
         columns raise :class:`SchemaError` listing every absentee.
+        ``turbine_id`` supplies the per-file identity in filename mode
+        (extracted by ingestion via :class:`FilenamePattern`).
         """
         required_raw = [self.dataset.timestamp_column, *self.columns.keys()]
         if self.dataset.turbine_column is not None:
@@ -119,6 +158,13 @@ class ColumnMapping(BaseModel):
         canonical = raw_frame[list(rename.keys())].rename(columns=rename)
         if self.dataset.turbine_id_constant is not None:
             canonical[schema.turbine_id_name] = self.dataset.turbine_id_constant
+        if self.dataset.turbine_id_from_filename is not None:
+            if turbine_id is None:
+                raise SchemaError(
+                    "Mapping declares turbine_id_from_filename but no turbine "
+                    "identity was supplied for this file"
+                )
+            canonical[schema.turbine_id_name] = turbine_id
         return canonical
 
 
@@ -169,14 +215,35 @@ def load_mapping(path: Path, schema: CanonicalSchema) -> ColumnMapping:
 
 
 def _validate_against_schema(mapping: ColumnMapping, schema: CanonicalSchema, path: Path) -> None:
-    exactly_one = (mapping.dataset.turbine_column is None) != (
-        mapping.dataset.turbine_id_constant is None
+    identity_modes = sum(
+        1
+        for mode in (
+            mapping.dataset.turbine_column,
+            mapping.dataset.turbine_id_constant,
+            mapping.dataset.turbine_id_from_filename,
+        )
+        if mode is not None
     )
-    if not exactly_one:
+    if identity_modes != 1:
         raise SchemaError(
-            "Mapping must declare exactly one of turbine_column or turbine_id_constant",
+            "Mapping must declare exactly one of turbine_column, "
+            "turbine_id_constant, or turbine_id_from_filename",
             path=str(path),
         )
+    pattern = mapping.dataset.turbine_id_from_filename
+    if pattern is not None:
+        try:
+            compiled = re.compile(pattern.pattern)
+        except re.error as exc:
+            raise SchemaError(
+                "turbine_id_from_filename pattern is not a valid regex",
+                pattern=pattern.pattern,
+            ) from exc
+        if compiled.groups < 1:
+            raise SchemaError(
+                "turbine_id_from_filename pattern needs a capture group",
+                pattern=pattern.pattern,
+            )
 
     structural = {schema.timestamp_name, schema.turbine_id_name}
     known = schema.names()

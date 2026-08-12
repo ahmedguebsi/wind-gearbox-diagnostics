@@ -66,15 +66,19 @@ def _config(**overrides) -> AppConfig:
     return AppConfig.model_validate(payload)
 
 
-def _write_fixture_csv(path: Path, rows: int = 240) -> Path:
-    """Synthetic 10-minute SCADA export, one turbine, deterministic values."""
+def _write_fixture_csv(path: Path, rows: int = 240, low_power_tail: int = 0) -> Path:
+    """Synthetic 10-minute SCADA export, one turbine, deterministic values.
+
+    ``low_power_tail`` rows at the end carry 10 kW — below the healthy-state
+    power floor — to exercise the unfiltered-monitoring semantics.
+    """
     import pandas as pd
 
     stamps = pd.date_range("2020-01-01", periods=rows, freq="10min")
     lines = ["RawTime,RawUnit,RawWind,RawPower,RawAmbient,RawOilTemp,RawBearingTemp"]
     for i, stamp in enumerate(stamps):
         wind = 4.0 + (i % 40) * 0.2
-        power = 200.0 + (i % 40) * 40.0
+        power = 10.0 if i >= rows - low_power_tail else 200.0 + (i % 40) * 40.0
         ambient = 5.0 + (i % 24) * 0.5
         oil = 45.0 + (i % 40) * 0.3
         bearing = 55.0 + (i % 40) * 0.25
@@ -294,6 +298,29 @@ class TestModelStages:
         )
         with pytest.raises(ConfigError, match="condition_binned"):
             run_pipeline(config, bad)
+
+    def test_monitoring_period_is_unfiltered(self, tmp_path, mapping):
+        """PROJECT.md §14 semantics: healthy-state construction applies to
+        the train/validation periods only; anomalous or below-power-floor
+        rows in the TEST period are the monitoring signal and stay in."""
+        csv = _write_fixture_csv(tmp_path / "scada_tail.csv", low_power_tail=20)
+        tail_inputs = PipelineInputs(
+            schema=SCHEMA,
+            mapping=mapping,
+            source_paths=(csv,),
+            feature=FeatureConfig(
+                predictors=(WIND_SPEED, ACTIVE_POWER, AMBIENT_TEMPERATURE),
+                targets=(GEARBOX_OIL_TEMPERATURE, GEARBOX_BEARING_TEMPERATURE),
+            ),
+            split_spec=SplitSpec(),
+        )
+        result = run_pipeline(_config(), tail_inputs)
+        # 240 rows -> split 168/36/36; the 20 low-power rows all fall in test.
+        assert result.metrics["split"]["test"] == 36
+        assert result.metrics["split"]["test_is_unfiltered_monitoring"] is True
+        assert result.healthy_report.total == 204  # train+validation only
+        test_residuals = result.residuals["test"]
+        assert len(test_residuals) == 36 * 2  # every monitoring row scored
 
     def test_reproduce_mismatch_on_tampered_prediction_file(self, inputs, store):
         """M-31 acceptance 1: predictions require EXACT match."""

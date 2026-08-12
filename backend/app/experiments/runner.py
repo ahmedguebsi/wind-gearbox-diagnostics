@@ -147,20 +147,33 @@ def run_pipeline(config: AppConfig, inputs: PipelineInputs) -> PipelineResult:
     )
     dataset_report = validate(dataset, inputs.schema)
     cleaned, audit = clean(dataset, inputs.schema, list(inputs.cleaning_operations))
+
+    # PROJECT.md §14: healthy training period → healthy validation period →
+    # test/monitoring period. The chronological split is computed on the
+    # CLEANED data; healthy-state construction applies to the train and
+    # validation periods only, and the TEST partition is the UNFILTERED
+    # monitoring period — anomalous rows there are the signal being
+    # monitored, never excluded.
+    split = split_chronologically(cleaned, inputs.schema, inputs.split_spec, inputs.flags)
+    train_boundary, _ = split.boundaries_utc
+    if train_boundary is None:
+        raise ConfigError("Split produced no training/validation boundary")
+
+    timestamp = inputs.schema.timestamp_name
+    pre_monitoring = cleaned.frame.loc[split.train.union(split.validation)]
     builder = HealthyStateBuilder(config.healthy_state, inputs.schema)
     healthy, healthy_report = builder.build(
-        cleaned,
+        cleaned.with_frame(pre_monitoring.reset_index(drop=True), stage="pre_monitoring"),
         fault_windows=list(inputs.fault_windows),
         alarm_windows=list(inputs.alarm_windows),
         maintenance_windows=list(inputs.maintenance_windows),
         step_changes=dataset_report.step_changes,
     )
-    split = split_chronologically(healthy, inputs.schema, inputs.split_spec, inputs.flags)
-
+    healthy_frame = healthy.frame
     partitions = {
-        "training": healthy.frame.loc[split.train],
-        "validation": healthy.frame.loc[split.validation],
-        "test": healthy.frame.loc[split.test],
+        "training": healthy_frame[healthy_frame[timestamp] < train_boundary],
+        "validation": healthy_frame[healthy_frame[timestamp] >= train_boundary],
+        "test": cleaned.frame.loc[split.test],
     }
     for name, frame in partitions.items():
         if frame.empty:
@@ -193,6 +206,9 @@ def run_pipeline(config: AppConfig, inputs: PipelineInputs) -> PipelineResult:
             "train": len(split.train),
             "validation": len(split.validation),
             "test": len(split.test),
+            "healthy_training": len(partitions["training"]),
+            "healthy_validation": len(partitions["validation"]),
+            "test_is_unfiltered_monitoring": True,
             "seasonal_warnings": len(split.seasonal_coverage.warnings),
         },
         "nbm": _nbm_metrics(inputs, partitions, predictions),
@@ -372,7 +388,9 @@ def _record_inflation(
 def _build_record(
     experiment_id: str, config: AppConfig, inputs: PipelineInputs, result: PipelineResult
 ) -> ExperimentRecord:
-    start, end = result.healthy_report.date_range_utc
+    stamps = result.cleaned.frame[inputs.schema.timestamp_name].dropna()
+    start = None if stamps.empty else stamps.min().to_pydatetime()
+    end = None if stamps.empty else stamps.max().to_pydatetime()
     thesis_report = result.fit_reports[THESIS_KEY]
     return ExperimentRecord(
         experiment_id=experiment_id,
@@ -391,10 +409,7 @@ def _build_record(
         dataset=DatasetMetadata(
             provenance=result.healthy.provenance,
             turbines=tuple(result.healthy_report.turbines),
-            date_range_utc=(
-                None if start is None else start.to_pydatetime(),
-                None if end is None else end.to_pydatetime(),
-            ),
+            date_range_utc=(start, end),
             modelling_span=inputs.modelling_span,
             deduplication=(
                 result.cleaned.deduplication.as_dict() if result.cleaned.deduplication else None

@@ -258,9 +258,14 @@ def ingest_files(
     frames: list[pd.DataFrame] = []
     records: list[ProvenanceRecord] = []
     for path in paths:
-        encoding = detect_encoding(path)
+        encoding = mapping.dataset.encoding or detect_encoding(path)
         raw = _read_frame(path, mapping, encoding)
-        canonical = mapping.to_canonical(raw, schema)
+        turbine_id = (
+            mapping.dataset.turbine_id_from_filename.extract(path.name)
+            if mapping.dataset.turbine_id_from_filename is not None
+            else None
+        )
+        canonical = mapping.to_canonical(raw, schema, turbine_id=turbine_id)
         canonical = _to_utc(canonical, mapping, schema)
         canonical = _apply_span(canonical, schema, span_start, span_end)
         canonical["__source__"] = path.name

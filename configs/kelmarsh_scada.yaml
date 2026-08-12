@@ -1,0 +1,61 @@
+# Kelmarsh SCADA raw-column -> canonical mapping (M-07).
+#
+# Column names are VERBATIM from the Greenbyte export headers (UTF-8, no
+# BOM, degree symbols included) - verified present in all 36 turbine-data
+# files across the six year-folders 2016-2021 on 2026-08-12.
+#
+# STATUS: PROPOSED - the predictor set awaits author approval before any
+# thesis run uses this mapping. Targets are the ADR-012 designation.
+#
+# File format (from the export banner, declared not assumed):
+#   - 9 comment lines, then the header row itself prefixed "# "
+#   - missing/erroneous values spelled "NaN"
+#   - "Time zone: UTC" declared on banner line 5 of every file
+#   - per-turbine files; no turbine column inside -> identity from filename
+#
+# Choices requiring author sign-off (flagged in the proposal report):
+#   - pitch_angle <- blade A of the three per-blade channels (A/B/C move
+#     together under collective pitch; A is the representative channel)
+#   - ambient_temperature <- "Ambient temperature (converter)" rather than
+#     "Nacelle ambient temperature" (lowest null fractions, 0.2-3.4%/year)
+#   - nacelle_temperature <- "Nacelle temperature" (exact name match;
+#     caveat: nacelle air is partially heated by the drivetrain, but it is
+#     a thesis-named predictor in PROJECT.md section 8)
+#
+# Exclusions honoured: no bearing/oil temperature channel as predictor, no
+# Max/Min/StdDev derived statistic of any target, no "Gear oil inlet
+# temperature" (ADR-012). Guard 8 validates this file's predictor/target
+# separation before any fit.
+
+schema_version: 1.2.0
+
+dataset:
+  timestamp_column: Date and time
+  source_timezone: UTC
+  encoding: utf-8
+  turbine_id_from_filename:
+    pattern: 'Turbine_Data_Kelmarsh_(\d)_'
+    template: 'Kelmarsh \1'
+  skip_lines: 9
+  header_comment_prefix: "#"
+  missing_value_tokens: ["NaN"]
+
+columns:
+  Wind speed (m/s):
+    canonical: wind_speed
+  Power (kW):
+    canonical: active_power
+  Rotor speed (RPM):
+    canonical: rotor_speed
+  Generator RPM (RPM):
+    canonical: generator_speed
+  Blade angle (pitch position) A (°):
+    canonical: pitch_angle
+  Ambient temperature (converter) (°C):
+    canonical: ambient_temperature
+  Nacelle temperature (°C):
+    canonical: nacelle_temperature
+  Gear oil temperature (°C):
+    canonical: gearbox_oil_temperature
+  Rear bearing temperature (°C):
+    canonical: gearbox_bearing_temperature
