@@ -239,3 +239,35 @@ Mitigation status:  OPEN — Chapter 5 must distinguish icing thermal
                     distinction is pre-committed, not post-hoc.
 Source:             docs/evidence/KELMARSH_STATUS_VOCABULARY_2016_2021.json
                     (long_stop_or_warning_events); ADR-017 evidence review.
+
+## LIM-011 — EWMA in-control false-alarm inflation (EXP-20260812-001)
+
+Date discovered:    2026-08-12
+Description:        EWMA in-control false-alarm inflation: empirical rate 0.16174 vs i.i.d. theoretical 0.00270 (59.9x) on the healthy validation block — serial correlation invalidates the theoretical ARL (risk R4); control limits may require widening.
+Affected RQ(s):     RQ2 (detection thresholds; risk R4)
+Mitigation status:  OPEN — widen limits or justify empirically (PROJECT.md §23)
+Source:             M-20 empirical in-control characterization, experiment EXP-20260812-001
+
+## LIM-012 — Status row with end before start (negative duration)
+
+Date discovered:    2026-08-12
+Description:        Exactly 1 of 282,234 parsed status rows has Timestamp end BEFORE Timestamp start: Kelmarsh 2, code 20 (Manual stop - remote), start 2016-10-10 13:43:49, end 2016-10-10 13:07:00 (-36.8 min). The M-24 event constructor refuses it; the row is reported verbatim and defines no exclusion window (same cannot-define-a-window policy as rows without ends).
+Affected RQ(s):     RQ2 (event/window derivation); negligible extent (1 row)
+Mitigation status:  ACCEPTED (single malformed row, excluded from window derivation with the refusal recorded; EXP-20260812-001)
+Source:             scripts/run_kelmarsh_experiment.py alarm-window derivation
+
+## LIM-013 — Monitoring-period ambient range exceeds training range
+
+Date discovered:    2026-08-12
+Description:        Seasonal coverage check (M-13, PROJECT.md 14) on the EXP-20260812-001 split: training ambient range (-4.1, 37.6) C vs monitoring-period range (-7.9, 44.0) C - the NBM extrapolates at both ambient extremes of the monitoring period, so residual inflation there may reflect seasonal covariate shift rather than degradation (risk R2). Calendar months are fully covered (26-month training window); the shortfall is range, not months.
+Affected RQ(s):     RQ1, RQ2
+Mitigation status:  OPEN - condition-binned normalization (D-12) and the error-vs-ambient diagnostic (PROJECT.md 20) are the named mitigations; discuss in Chapter 5
+Source:             M-13 seasonal coverage report, experiment EXP-20260812-001
+
+## LIM-014 — Step-change exclusions dominate healthy-state attrition
+
+Date discovered:    2026-08-12
+Description:        In EXP-20260812-001, healthy-state retention over the train/validation periods is 46.2% (391,545 of 847,396 rows). The dominant exclusion is sensor_failure_or_step_change: 337,263 rows (39.8%), from the M-10 step-change heuristic (rolling-median window 144, min magnitude 5.0 C) with +/-1 day exclusion windows. Alarm periods removed 69,705 rows and the 50 kW power floor 48,883. Whether the step-change detector is identifying real recalibrations or over-firing on operational thermal swings is UNREVIEWED - its parameters were never sensitivity-tested and are not provisional-marked.
+Affected RQ(s):     RQ1 (training representativeness), RQ2 (thresholds)
+Mitigation status:  OPEN - author review of detected step changes required before the next headline run; do not retune silently
+Source:             M-12 HealthyStateReport, experiment EXP-20260812-001
