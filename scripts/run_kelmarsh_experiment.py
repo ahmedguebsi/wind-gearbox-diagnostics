@@ -75,19 +75,31 @@ def turbine_data_paths(downloads: Path) -> list[Path]:
     return paths
 
 
-def alarm_windows(downloads: Path) -> tuple[list[ExclusionWindow], dict[str, int]]:
-    """Stop/Warning windows with populated ends, within the train/val span."""
+def alarm_windows(
+    downloads: Path,
+) -> tuple[list[ExclusionWindow], dict[str, object]]:
+    """Stop/Warning windows with populated ends, within the train/val span.
+
+    Rows the event constructor refuses (e.g. end-before-start pairs — real
+    rows in the 2016 export) are collected and reported as dataset findings
+    (LIM-011), never guessed at.
+    """
     folders = sorted(p for p in downloads.glob("Kelmarsh_SCADA_*") if p.is_dir())
     span_start = pd.Timestamp(SPAN[0], tz="UTC")
     trainval_end = pd.Timestamp(VALIDATION_END, tz="UTC")
     windows: list[ExclusionWindow] = []
+    rejected: list[dict[str, str]] = []
     skipped_no_end = 0
     n_rows = 0
     for folder in folders:
         for path in sorted(folder.glob("Status_Kelmarsh_*.csv")):
             turbine = "Kelmarsh " + path.name.split("Status_Kelmarsh_")[1][0]
             events, _record = parse_status_csv(
-                path, turbine=turbine, skip_lines=STATUS_SKIP_LINES, schema_version="1.2.0"
+                path,
+                turbine=turbine,
+                skip_lines=STATUS_SKIP_LINES,
+                schema_version="1.2.0",
+                rejected=rejected,
             )
             for event in events:
                 n_rows += 1
@@ -106,7 +118,13 @@ def alarm_windows(downloads: Path) -> tuple[list[ExclusionWindow], dict[str, int
                         reason="alarm_period",
                     )
                 )
-    return windows, {"status_rows_seen": n_rows, "stop_warning_without_end": skipped_no_end}
+    stats: dict[str, object] = {
+        "status_rows_seen": n_rows,
+        "stop_warning_without_end": skipped_no_end,
+        "rows_rejected_by_constructor": len(rejected),
+        "rejected_examples": rejected[:5],
+    }
+    return windows, stats
 
 
 def metric_cis(residuals: np.ndarray, actual: np.ndarray) -> dict[str, dict[str, float]]:

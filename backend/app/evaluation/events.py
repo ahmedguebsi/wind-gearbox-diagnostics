@@ -134,13 +134,24 @@ STATUS_EXPORT_COLUMNS: tuple[str, ...] = (
 )
 
 
-def parse_status_frame(frame: pd.DataFrame, *, turbine: str) -> list[AlarmLevelEvent]:
+def parse_status_frame(
+    frame: pd.DataFrame,
+    *,
+    turbine: str,
+    rejected: list[dict[str, str]] | None = None,
+) -> list[AlarmLevelEvent]:
     """Greenbyte status rows → alarm-level events (UTC; census-declared).
 
     ``Timestamp end`` holding the literal ``-`` becomes ``None`` — most
     status rows carry no measurable duration (LIM-003), and that absence is
     preserved, never imputed. A ``Status`` value outside the observed
     four-value vocabulary is an error: the census does not assume beyond it.
+
+    ``rejected``: when a list is supplied, rows the event constructor
+    refuses (e.g. end-before-start timestamp pairs — real rows exist in the
+    2016 export) are collected verbatim with the refusal reason instead of
+    aborting the parse; the caller reports them as dataset findings
+    (LIM-011). When None (the default), the first invalid row raises.
     """
     missing = [c for c in STATUS_EXPORT_COLUMNS if c not in frame.columns]
     if missing:
@@ -158,22 +169,41 @@ def parse_status_frame(frame: pd.DataFrame, *, turbine: str) -> list[AlarmLevelE
             ) from exc
         raw_end = str(row["Timestamp end"]).strip()
         end = None if raw_end in (BLANK_DASH, "", "nan", "NaT") else pd.Timestamp(raw_end, tz="UTC")
-        events.append(
-            AlarmLevelEvent(
-                turbine=turbine,
-                start_utc=pd.Timestamp(str(row["Timestamp start"]).strip(), tz="UTC"),
-                end_utc=end,
-                event_type=EventType.ALARM,
-                code=str(row["Code"]).strip(),
-                description=str(row["Message"]).strip(),
-                status=status,
+        try:
+            events.append(
+                AlarmLevelEvent(
+                    turbine=turbine,
+                    start_utc=pd.Timestamp(str(row["Timestamp start"]).strip(), tz="UTC"),
+                    end_utc=end,
+                    event_type=EventType.ALARM,
+                    code=str(row["Code"]).strip(),
+                    description=str(row["Message"]).strip(),
+                    status=status,
+                )
             )
-        )
+        except ConfigError as exc:
+            if rejected is None:
+                raise
+            rejected.append(
+                {
+                    "turbine": turbine,
+                    "start": str(row["Timestamp start"]).strip(),
+                    "end": raw_end,
+                    "code": str(row["Code"]).strip(),
+                    "status": raw_status,
+                    "reason": str(exc),
+                }
+            )
     return events
 
 
 def parse_status_csv(
-    path: Path, *, turbine: str, skip_lines: int = 0, schema_version: str = ""
+    path: Path,
+    *,
+    turbine: str,
+    skip_lines: int = 0,
+    schema_version: str = "",
+    rejected: list[dict[str, str]] | None = None,
 ) -> tuple[list[AlarmLevelEvent], ProvenanceRecord]:
     """Load a status CSV with provenance capture (M-24 test obligation).
 
@@ -189,7 +219,7 @@ def parse_status_csv(
         schema_version=schema_version,
         mapping_hash="status-export-parser-v1",
     )
-    return parse_status_frame(frame, turbine=turbine), record
+    return parse_status_frame(frame, turbine=turbine, rejected=rejected), record
 
 
 def _utc(text: str) -> pd.Timestamp:

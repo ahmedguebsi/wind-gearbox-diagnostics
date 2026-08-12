@@ -170,3 +170,21 @@ class TestStatusParsing:
         assert record.sha256
         assert record.source_timezone == "UTC"
         record.verify()
+
+    def test_end_before_start_raises_by_default(self):
+        frame = STATUS_ROWS.copy()
+        frame.loc[0, "Timestamp end"] = "2020-03-01 09:00:00"  # before start
+        with pytest.raises(ConfigError, match="ends before"):
+            parse_status_frame(frame, turbine="T1")
+
+    def test_end_before_start_collected_when_requested(self):
+        """Real rows like this exist in the 2016 export (LIM-011): with a
+        collector supplied, the row is reported verbatim, never guessed at."""
+        frame = STATUS_ROWS.copy()
+        frame.loc[0, "Timestamp end"] = "2020-03-01 09:00:00"
+        rejected: list[dict[str, str]] = []
+        events = parse_status_frame(frame, turbine="T1", rejected=rejected)
+        assert len(events) == 1  # the valid row still parses
+        assert len(rejected) == 1
+        assert rejected[0]["code"] == "1860"
+        assert "ends before" in rejected[0]["reason"]
