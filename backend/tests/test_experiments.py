@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from app.core.config import AppConfig
 from app.core.errors import CausalSeparationError, ConfigError, ProvenanceError, SplitPolicyError
+from app.core.limitations import append_limitation, next_lim_id
 from app.data.guards import FeatureConfig
 from app.data.mapping import load_mapping
 from app.data.schema import (
@@ -25,7 +26,6 @@ from app.data.schema import (
 )
 from app.data.splitting import ExperimentFlags, SplitSpec, SplitStrategy
 from app.experiments.__main__ import main as cli_main
-from app.experiments.limitations import append_limitation, next_lim_id
 from app.experiments.reproduce import ReproductionStatus, reproduce
 from app.experiments.runner import (
     PipelineInputs,

@@ -20,6 +20,8 @@ EXPECTED_PROVISIONAL = sorted(
     [
         "detection.control_limit_sigma",
         "detection.ewma_lambda",
+        "detection.persistence_min_samples",
+        "evaluation.event_match_window_days",
         "healthy_state.fault_pre_exclusion_days",
         "healthy_state.maintenance_post_exclusion_days",
         "healthy_state.minimum_active_power_kw",

@@ -134,6 +134,24 @@ class DetectionConfig(StrictModel):
     control_limit_sigma: float = provisional_field(3.0, "Control-limit multiplier", gt=0.0)
     #: D-10 keeps the formulation open; both branches exist as configuration.
     control_limit_formulation: Literal["steady_state", "time_varying"] = "steady_state"
+    #: ADR-017(b): a detection qualifies only when sustained; isolated
+    #: single-sample crossings never count.
+    persistence_min_samples: int = provisional_field(
+        3, "Consecutive exceedance samples for a persistent detection", ge=2
+    )
+
+
+class EvaluationConfig(StrictModel):
+    """Event-evaluation configuration (PROJECT.md §27; ADR-017)."""
+
+    #: ADR-017(a): a detection matches an event when its first persistent
+    #: exceedance falls within [event_start - window, event_start].
+    event_match_window_days: int = provisional_field(
+        14, "Pre-event matching window in days (ADR-017; sweep 7/14/30)", ge=1
+    )
+    #: The pre-committed Phase 0.5 decision rule threshold (PROJECT.md §7.5).
+    #: NOT provisional: the rule is fixed; the census count selects the branch.
+    min_events_for_inferential: int = 2
 
 
 class AppConfig(StrictModel):
@@ -145,6 +163,7 @@ class AppConfig(StrictModel):
     model: ModelConfig = ModelConfig()
     residual: ResidualConfig = ResidualConfig()
     detection: DetectionConfig = DetectionConfig()
+    evaluation: EvaluationConfig = EvaluationConfig()
 
 
 # Key carried in resolved output only; regenerated on every resolution.

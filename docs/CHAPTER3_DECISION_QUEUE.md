@@ -95,7 +95,7 @@ Evidence tags (exactly one per item):
 
 ---
 
-## Group B — CENSUS (D-04, D-05 CLOSED 2026-08-12; D-06, D-07 remain open)
+## Group B — CENSUS (D-04, D-05, D-06 CLOSED 2026-08-12; D-07 remains open)
 
 > D-04 CLOSED → ADR-013: status-code-derived events qualified by duration
 > and preceding-thermal-coverage; tier ALARM-LEVEL ONLY; EVENT-001 (code
@@ -134,7 +134,7 @@ Evidence tags (exactly one per item):
 - **Blocked until closed:** M-27 `inferential_allowed` mode, RQ2/RQ3 claim
   strength, LIMITATIONS.md small-n entry.
 
-### D-06 — Event-matching windows — VIVA RISK: **High**
+### D-06 — Event-matching windows — VIVA RISK: **High** — CLOSED (ADR-017)
 
 - **Decision:** how a detection is matched to a known event (window length
   before the event, persistence qualification for "first detection", per-type

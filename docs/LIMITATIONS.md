@@ -211,3 +211,25 @@ Affected RQ(s):     none directly; reproducibility of every result (risk R10).
 Mitigation status:  OPEN — create the GitHub remote and enable Actions before
                     headline experiments are run.
 Source:             manual (author-flagged, 2026-08-12).
+
+## LIM-010 — Icing events 9 days before EVENT-001 onset (known confounder)
+
+Date discovered:    2026-08-12
+Description:        Kelmarsh 1 logged an icing pair on 2019-02-03 04:00:30
+                    — code 6682 "Icing (dev. electr. power)" (Warning) and
+                    code 6690 "Icing (stop)" (Stop), 9.7 h duration — nine
+                    days before EVENT-001 occurrence 1's onset
+                    (2019-02-24 16:46:28). Icing perturbs the thermal
+                    operating regime, so early-February residual behaviour
+                    on Kelmarsh 1 may reflect icing thermal response rather
+                    than lubrication degradation. Identified from the
+                    committed census evidence BEFORE any detection results
+                    were examined; it also bounds the ADR-017 matching
+                    window (a window beyond ~14 days would capture it).
+Affected RQ(s):     RQ2, RQ3 (EVENT-001 case-study interpretation).
+Mitigation status:  OPEN — Chapter 5 must distinguish icing thermal
+                    response from lubrication degradation when interpreting
+                    early-February residual behaviour; recorded here so the
+                    distinction is pre-committed, not post-hoc.
+Source:             docs/evidence/KELMARSH_STATUS_VOCABULARY_2016_2021.json
+                    (long_stop_or_warning_events); ADR-017 evidence review.

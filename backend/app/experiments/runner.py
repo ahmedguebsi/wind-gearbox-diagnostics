@@ -30,6 +30,7 @@ import pandas as pd
 
 from app.core.config import AppConfig, NormalizationMethod, config_hash, resolved_dict
 from app.core.errors import ConfigError
+from app.core.limitations import append_limitation
 from app.core.logging import experiment_logging, get_logger
 from app.core.time import utc_now
 from app.core.versioning import capture_version_stamp
@@ -47,7 +48,6 @@ from app.data.splitting import (
     split_chronologically,
 )
 from app.data.validation import DatasetReport, validate
-from app.experiments.limitations import append_limitation
 from app.experiments.store import ArtifactStore
 from app.experiments.tracker import (
     DatasetMetadata,

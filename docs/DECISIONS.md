@@ -472,3 +472,49 @@ Affected modules:  M-23 (comparison outputs are judged against this
                    criterion; full curves mandatory), M-27 (EVENT-001
                    timestamps; `inferential_allowed` gating), M-28 (claim
                    phrasing in tables), thesis Chapters 3 and 5.
+
+## ADR-017 — Event-matching window
+
+Status:            CLOSED (2026-08-12) — decision queue D-06
+Question:          How is a detection matched to a known event: window
+                   length before the event, persistence qualification for
+                   "first detection", per-type windows? (PROJECT.md §27.2;
+                   queue D-06.)
+Decision:          Author ruling (2026-08-12).
+                   (a) WINDOW: 14 days preceding the event start timestamp.
+                       A detection matches EVENT-001 if its first
+                       persistent exceedance falls within
+                       [event_start − 14 days, event_start].
+                   (b) PERSISTENCE QUALIFICATION: a detection qualifies
+                       only if the exceedance is sustained per the
+                       configured EWMA persistence criterion — isolated
+                       single-sample crossings do not count as detections.
+                   (c) GRID ALIGNMENT: detections resolve to the 10-minute
+                       SCADA grid while event timestamps are
+                       second-resolution; lead times are therefore
+                       quantised to 10 minutes and are reported as such.
+                   (d) SENSITIVITY: 14 days is provisional-marked. The
+                       M-27 sensitivity suite sweeps it (7 / 14 / 30 days)
+                       and reports whether the EVENT-001 case-study
+                       conclusion is stable across that range.
+Justification:     From the D-06 census evidence (docs/evidence/
+                   KELMARSH_STATUS_VOCABULARY_2016_2021.*,
+                   EVIDENCE_D04_AND_TARGETS.json):
+                   - occurrence 1 has 798.3 h (33.3 days) of continuous
+                     covered SCADA before onset, so a 14-day window sits
+                     well inside available coverage;
+                   - the nearest unrelated long disturbance is the icing
+                     pair (codes 6682/6690, 2019-02-03, 9.7 h) 9 days
+                     before onset; a window beyond ~14 days would begin
+                     capturing it, conflating icing thermal response with
+                     lubrication degradation (confounder logged as
+                     LIM-010);
+                   - median preceding coverage across all 6,930
+                     Stop/Warning rows is 222.8 h (9.3 days), so 14 days
+                     is generous relative to typical event spacing without
+                     being unbounded.
+Affected modules:  M-27 (event matching, lead-time computation,
+                   `event_match_window_days` config with provisional
+                   marker; sensitivity grid 7/14/30), M-23 (event columns
+                   attach at matched operating points via M-27),
+                   LIMITATIONS.md (LIM-010).
