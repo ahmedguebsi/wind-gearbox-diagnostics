@@ -20,11 +20,12 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from app.core.errors import SchemaError
 
 #: Current canonical schema version (semver). Bump via ADR-004 only.
-#: 1.2.0 — recorded the ADR-012 target designation in variable descriptions:
-#: the bearing target is the rear (HSS-side) gearbox bearing; oil-inlet
-#: temperature is excluded as a target. Raw-column assignment stays in the
-#: M-07 mapping config.
-SCHEMA_VERSION = "1.2.0"
+#: 1.3.0 — ADR-020 widened generator_speed plausible_range from (-1, 5000)
+#: to (-5, 5000): sensor jitter around zero at standstill is routine across
+#: the fleet, so the -1 bound mis-stated the schema's own "physically
+#: impossible" claim. Deeper negatives stay out of range (rotor is
+#: stationary at every such row; see ADR-020).
+SCHEMA_VERSION = "1.3.0"
 
 _SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
@@ -185,7 +186,7 @@ def default_schema() -> CanonicalSchema:
             name=GENERATOR_SPEED,
             role=VariableRole.PREDICTOR,
             unit="rpm",
-            plausible_range=(-1.0, 5000.0),
+            plausible_range=(-5.0, 5000.0),
         ),
         CanonicalVariable(name=ACTIVE_POWER, role=VariableRole.PREDICTOR, unit="kW"),
         CanonicalVariable(

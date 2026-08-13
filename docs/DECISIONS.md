@@ -208,7 +208,7 @@ Status:            OPEN (standing log)
 Question:          Standing record of `schema_version` bumps (semver) required
                    by PROJECT.md §8. Each schema change appends an entry here
                    with its rationale.
-Current version:   1.2.0 (stamped by M-06 `app/data/schema.py`)
+Current version:   1.3.0 (stamped by M-06 `app/data/schema.py`)
 Version log:
   - 1.0.0 (2026-08-11) initial canonical schema: structural variables, the
     thesis-identified upstream predictors, and the two required thermal
@@ -225,6 +225,16 @@ Version log:
     `gearbox_oil_temperature` notes the ADR-012 exclusion of oil-inlet
     temperature as a target. Minor bump: descriptive only, no variable
     renamed, added, or removed.
+  - 1.3.0 (2026-08-13) ADR-020 widened `generator_speed` plausible_range
+    from (−1, 5000) to (−5, 5000): sensor jitter around zero on parked
+    turbines — 2,621 flagged rows in (−10, −1], overwhelmingly (−2, −1],
+    across all six machines and all six years — is routine, not physically
+    impossible, so the −1 bound mis-stated the schema's own claim. Minor
+    bump: one variable's bounds changed; nothing renamed, added, or
+    removed. Caught by the pinned schema-hash drift test and re-pinned
+    with this entry. The Kelmarsh mapping config's declared version
+    follows; its column assignments are unchanged from the approved 1.2.0
+    mapping.
 Affected modules:  M-06, M-07, M-10 (RangeRule reads bounds from the schema),
                    M-29
 
@@ -642,3 +652,75 @@ Affected:          Chapter 3 (guard architecture discussion: what the
                    checklist guarantees and what it structurally cannot),
                    M-27 (unchanged code; its acceptance criterion is now
                    documented as consistency, not completeness).
+
+## ADR-020 — generator_speed bounds and the impossible-value handling policy
+
+Status:            CLOSED (2026-08-13) — Ruling 2 of the EXP-20260812-001
+                   pending author rulings (the run's only validation ERROR:
+                   3,226 rows outside the declared plausible range)
+Question:          Do the (−1, 5000) RPM bounds stand, and what — if any —
+                   policy acts on RANGE.IMPOSSIBLE values? Until this
+                   ruling no policy existed: findings were reported and all
+                   3,226 rows entered the modelling data.
+Evidence:          All 3,226 flagged values are negative (none ≥ 5000);
+                   two distinct populations (measured across all 36 raw
+                   files):
+                   - 2,621 rows in (−10, −1], overwhelmingly (−2, −1] —
+                     parked-turbine sensor jitter around zero, on all six
+                     machines in all six years (active power < 50 kW at
+                     every flagged row; median −0.7 kW).
+                   - 605 rows ≤ −10 RPM, including 269 identical readings
+                     at −576.6 and a 238-sample run (~39.7 h, Kelmarsh 5,
+                     from 2017-01-25 20:20). Rotor speed is ZERO at every
+                     one of them (max 1.469 RPM); −576 generator RPM would
+                     require rotor ≈ −5.4 RPM through the ~106:1 ratio —
+                     impossible, so these are stuck or faulted signals,
+                     not measurement.
+                   In EXP-20260812-001 the train/validation instances were
+                   excluded from the healthy state only because the 50 kW
+                   power floor happened to remove them — coincidental
+                   protection by a provisional parameter swept at
+                   25/50/100 kW — and 1,462 rows were scored in the test
+                   partition, so residuals there were computed from
+                   impossible predictors and are not interpretable
+                   (LIM-016).
+Decision:          Author ruling (2026-08-13). Two populations, two
+                   treatments:
+                   (a) SCHEMA: `generator_speed` plausible_range widened
+                       from (−1, 5000) to (−5, 5000) — standstill jitter
+                       is routine, not physically impossible; the −1 bound
+                       mis-stated the schema's own claim. Schema 1.3.0
+                       (ADR-004 log); pinned hash re-pinned; the Kelmarsh
+                       mapping config's declared schema version follows
+                       with column assignments unchanged.
+                   (b) HANDLING POLICY (new): RANGE.IMPOSSIBLE values on
+                       any predictor are set to missing at cleaning
+                       (`nullify_impossible_predictor_values`), then
+                       removed by the existing `drop_missing_any_predictor`
+                       rule with its audit trail — in ALL partitions,
+                       monitoring included. A value the schema declares
+                       physically impossible cannot serve as a model input
+                       anywhere. The cleaning layer refuses the nullify
+                       operation unless the drop rule follows it, so the
+                       policy cannot silently half-apply.
+                   (c) The 605 deep negatives remain out of range under
+                       the widened bound and are handled by (b).
+                   (d) REPORTING: when the policy is active, the runner
+                       states the dropped-row count per split partition in
+                       metrics (`cleaning.impossible_predictor_rows_dropped_
+                       by_partition`), so the number is visible rather than
+                       inferred. The audit's nullify entry records values
+                       nullified per column. (Cleaning precedes splitting,
+                       so the per-partition statement lives in metrics.json
+                       beside the audit, not inside it.)
+Under this policy, EXP-20260812-001's 3,226 flagged rows resolve as: 2,620
+rows in (−5, −1] become in-range and stay; 606 rows below −5 are dropped
+(under the current provisional split: 354 train / 32 validation / 220 test
+— the one row in (−10, −5], Kelmarsh 5 at −8.4 RPM on 2018-06-15, falls in
+train).
+Affected modules:  M-06 (schema 1.3.0), M-07 (mapping version follows),
+                   M-10 (RangeRule unchanged; reads the new bounds),
+                   M-11 (nullify operation + ordering guard + audit
+                   detail), M-30 (per-partition metric),
+                   scripts/run_kelmarsh_experiment.py (operation added),
+                   LIMITATIONS.md (LIM-016).

@@ -308,3 +308,31 @@ Mitigation status:  OPEN — closed per instance as constants are discovered
                     limit is stated in Chapter 3's guard discussion
 Source:             manual (author-directed during the ADR-018 ruling
                     review); ADR-019
+
+## LIM-016 — EXP-20260812-001 scored monitoring rows on impossible predictors
+
+Date discovered:    2026-08-13
+Description:        EXP-20260812-001 had no handling policy for
+                    RANGE.IMPOSSIBLE values: 1,462 test-partition rows were
+                    scored with generator_speed readings the schema declares
+                    physically impossible (all negative; rotor stationary at
+                    every one), so residuals and EWMA states at those
+                    timestamps were computed from impossible predictor
+                    inputs and are not interpretable. In train/validation
+                    the 1,764 such rows were kept out of the healthy state
+                    only coincidentally — the provisional 50 kW power floor
+                    happened to exclude them, and that floor is swept at
+                    25/50/100 kW, so the protection could have vanished
+                    silently under a sweep.
+Affected RQ(s):     RQ1 (monitoring-period metrics include those rows),
+                    RQ2 (detection states at those timestamps)
+Mitigation status:  MITIGATED (2026-08-13, ADR-020: impossible predictor
+                    values are nullified at cleaning and the rows dropped
+                    via drop_missing_any_predictor in ALL partitions, with
+                    per-partition counts stated in metrics; schema 1.3.0
+                    reclassifies standstill jitter in (−5, −1] as in-range.
+                    Applies from the next run — EXP-20260812-001's stored
+                    artifacts are unchanged by design.)
+Source:             EXP-20260812-001 dataset_report (RANGE.IMPOSSIBLE,
+                    3,226 rows); raw-file analysis during the Ruling 2
+                    review; ADR-020

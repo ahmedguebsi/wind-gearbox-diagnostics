@@ -164,10 +164,60 @@ class TestCleaning:
         """Meta-test: no cleaning path removes rows without recording it."""
         dataset = make_dataset(synthetic_frame(days=2))
         for name in OPERATION_REGISTRY:
-            _, audit = clean(dataset, default_schema(), [name])
-            assert len(audit.operations) == 1
+            # ADR-020: the nullify operation refuses to run without its
+            # companion drop rule, so it is exercised as the pair.
+            operations = (
+                [name, "drop_missing_any_predictor"]
+                if name == "nullify_impossible_predictor_values"
+                else [name]
+            )
+            _, audit = clean(dataset, default_schema(), operations)
+            assert len(audit.operations) == len(operations)
             assert audit.operations[0].rule == name
             assert audit.operations[0].reason
+
+    def test_impossible_predictor_values_nullified_then_dropped(self):
+        """ADR-020: impossible predictor values cannot serve as model
+        inputs; the row is removed with the count visible in the audit."""
+        frame = synthetic_frame(days=2)
+        frame["generator_speed"] = 1500.0
+        frame.loc[3, "generator_speed"] = -576.6  # stuck-signal artefact
+        frame.loc[7, "generator_speed"] = 9999.0
+        cleaned, audit = clean(
+            make_dataset(frame),
+            default_schema(),
+            ["nullify_impossible_predictor_values", "drop_missing_any_predictor"],
+        )
+        assert len(cleaned.frame) == len(frame) - 2
+        nullify = audit.operations[0]
+        assert nullify.rows_removed == 0  # it nullifies; the drop rule removes
+        assert nullify.detail["rows_affected"] == 2
+        assert nullify.detail["by_column"] == {"generator_speed": 2}
+        assert audit.operations[1].rows_removed == 2
+        assert audit.arithmetic_holds()
+
+    def test_standstill_jitter_within_widened_bounds_is_kept(self):
+        """ADR-020 schema 1.3.0: -1 to -5 RPM at standstill is routine
+        sensor jitter, not physically impossible."""
+        frame = synthetic_frame(days=2)
+        frame["generator_speed"] = 1500.0
+        frame.loc[3, "generator_speed"] = -1.4
+        cleaned, audit = clean(
+            make_dataset(frame),
+            default_schema(),
+            ["nullify_impossible_predictor_values", "drop_missing_any_predictor"],
+        )
+        assert len(cleaned.frame) == len(frame)
+        assert audit.operations[0].detail == {}
+
+    def test_nullify_without_drop_rule_rejected(self):
+        """ADR-020: the policy must not silently half-apply."""
+        with pytest.raises(ConfigError):
+            clean(
+                make_dataset(synthetic_frame(days=1)),
+                default_schema(),
+                ["nullify_impossible_predictor_values"],
+            )
 
 
 class TestHealthyState:

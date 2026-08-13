@@ -34,7 +34,7 @@ from app.core.limitations import append_limitation
 from app.core.logging import experiment_logging, get_logger
 from app.core.time import utc_now
 from app.core.versioning import capture_version_stamp
-from app.data.cleaning import CleaningAudit, clean
+from app.data.cleaning import CleaningAudit, clean, impossible_predictor_rows
 from app.data.guards import FeatureConfig, validate_feature_configuration
 from app.data.healthy_state import ExclusionWindow, HealthyStateBuilder, HealthyStateReport
 from app.data.ingestion import CanonicalDataset, ingest_files
@@ -124,6 +124,35 @@ class PipelineResult:
     metrics: dict[str, Any]
 
 
+def _cleaning_metrics(
+    audit: CleaningAudit,
+    cleaned: CanonicalDataset,
+    dataset: CanonicalDataset,
+    inputs: PipelineInputs,
+    split: Split,
+) -> dict[str, Any]:
+    """Cleaning metrics. When the ADR-020 policy is active, the rows dropped
+    for impossible predictor values are counted per split partition, so the
+    number is stated rather than inferred from audit arithmetic."""
+    metrics: dict[str, Any] = {
+        "rows_removed": audit.total_removed,
+        "rows_after": len(cleaned.frame),
+    }
+    if "nullify_impossible_predictor_values" not in inputs.cleaning_operations:
+        return metrics
+    mask = impossible_predictor_rows(dataset.frame, inputs.schema)
+    stamps = dataset.frame.loc[mask, inputs.schema.timestamp_name].dropna()
+    train_boundary, test_boundary = split.boundaries_utc
+    counts = {"train": 0, "validation": 0, "test": 0}
+    if train_boundary is not None and test_boundary is not None:
+        counts["train"] = int((stamps < train_boundary).sum())
+        counts["validation"] = int(((stamps >= train_boundary) & (stamps < test_boundary)).sum())
+        counts["test"] = int((stamps >= test_boundary).sum())
+    metrics["impossible_predictor_rows_dropped_total"] = int(mask.sum())
+    metrics["impossible_predictor_rows_dropped_by_partition"] = counts
+    return metrics
+
+
 def run_pipeline(config: AppConfig, inputs: PipelineInputs) -> PipelineResult:
     """Run the full pipeline in memory. Raises on any guard violation."""
     # Guards fire before any file is opened (fail-early, M-30 acceptance 2).
@@ -196,7 +225,7 @@ def run_pipeline(config: AppConfig, inputs: PipelineInputs) -> PipelineResult:
             "warnings": len(dataset_report.warnings),
             "step_changes": len(dataset_report.step_changes),
         },
-        "cleaning": {"rows_removed": audit.total_removed, "rows_after": len(cleaned.frame)},
+        "cleaning": _cleaning_metrics(audit, cleaned, dataset, inputs, split),
         "healthy_state": {
             "accepted": healthy_report.accepted,
             "excluded": healthy_report.excluded,

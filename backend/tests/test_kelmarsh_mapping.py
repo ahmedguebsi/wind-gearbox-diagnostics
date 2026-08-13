@@ -28,7 +28,7 @@ KELMARSH_MAPPING = REPO_ROOT / "configs" / "kelmarsh_scada.yaml"
 class TestKelmarshMappingConfig:
     def test_loads_with_mandatory_declarations(self):
         mapping = load_mapping(KELMARSH_MAPPING, SCHEMA)
-        assert mapping.schema_version == "1.2.0"
+        assert mapping.schema_version == "1.3.0"
         assert mapping.dataset.source_timezone == "UTC"
         assert mapping.dataset.encoding == "utf-8"
         assert mapping.dataset.skip_lines == 9

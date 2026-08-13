@@ -17,8 +17,8 @@ Run configuration (documented, provisional where noted):
   periods. Rows without an end cannot define a window and are counted and
   reported, never guessed.
 - Cleaning: drop_unparseable_timestamps, drop_missing_any_target,
-  drop_missing_any_predictor (rows that cannot be scored or produce
-  residuals; every removal audited).
+  nullify_impossible_predictor_values (ADR-020), drop_missing_any_predictor
+  (rows that cannot be scored or produce residuals; every removal audited).
 
 Usage (from backend/):
     uv run python ../scripts/run_kelmarsh_experiment.py --approved-by "MK 2026-08-12"
@@ -225,6 +225,10 @@ def main() -> int:
         cleaning_operations=(
             "drop_unparseable_timestamps",
             "drop_missing_any_target",
+            # ADR-020: impossible predictor values become missing, then the
+            # drop rule removes the row — in every partition, monitoring
+            # included.
+            "nullify_impossible_predictor_values",
             "drop_missing_any_predictor",
         ),
         alarm_windows=tuple(windows),
