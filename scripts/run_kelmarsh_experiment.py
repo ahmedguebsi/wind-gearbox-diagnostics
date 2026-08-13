@@ -10,8 +10,8 @@ Run configuration (documented, provisional where noted):
 - Explicit chronological split — TRAIN to 2018-07-01, VALIDATION to
   2019-02-01, TEST/monitoring from there (places EVENT-001 in TEST per
   ADR-010, with the monitoring period opening before the ADR-017 14-day
-  match window). D-07 remains OPEN: these dates are run configuration for
-  the author to ratify, not a closed decision.
+  match window). RATIFIED by ADR-023 (closes D-07); 70/15/15 fractions
+  are recorded there as infeasible for this dataset.
 - Alarm windows for healthy-state exclusion: status rows with Status in
   {Stop, Warning} AND a populated Timestamp end, across the ADR-009
   modelling span (ADR-022: monitoring-period windows feed the RQ1 healthy
@@ -62,8 +62,8 @@ from app.residuals.ewma import ControlLimitFormulation, ControlLimitSpec, EwmaDe
 from app.residuals.normalization import partition_for  # noqa: E402
 
 SPAN = (date(2016, 5, 3), date(2021, 6, 30))  # ADR-009
-TRAIN_END = date(2018, 7, 1)  # provisional run configuration (D-07 open)
-VALIDATION_END = date(2019, 2, 1)  # before EVENT-001 - 14d window (ADR-010/017)
+TRAIN_END = date(2018, 7, 1)  # RATIFIED (ADR-023, closes D-07)
+VALIDATION_END = date(2019, 2, 1)  # 9.7 d before the ADR-017 window opens (ADR-023)
 STATUS_SKIP_LINES = 9
 BOOTSTRAP_REPLICATES = 1000
 BOOTSTRAP_SEED = 42
@@ -240,8 +240,9 @@ def main() -> int:
         modelling_span=SPAN,
         seeds={},
         supplier_note=(
-            f"Kelmarsh Zenodo 10.5281/zenodo.5841833 (CC-BY-4.0); first real run; "
-            f"approved by {args.approved_by}; split dates provisional (D-07 open)"
+            f"Kelmarsh Zenodo 10.5281/zenodo.5841833 (CC-BY-4.0); headline run under "
+            f"ADR-018/020/021/022/023; approved by {args.approved_by}; split dates "
+            f"ratified (ADR-023)"
         ),
         limitations_path=REPO_ROOT / "docs" / "LIMITATIONS.md",
     )
@@ -252,28 +253,43 @@ def main() -> int:
     directory = store.experiment_dir(experiment_id)
     print(f"Experiment {experiment_id} persisted at {directory}")
 
-    # ---- RQ1: metrics with blocked-bootstrap CIs + DM per target ----------
-    print("Computing blocked-bootstrap CIs and DM tests...")
-    rq1: dict[str, dict] = {}
-    test_frames: dict[str, pd.DataFrame] = {}
+    # ---- RQ1: ADR-022 three-period table with CIs + DM per target ---------
+    # Headline: monitoring_healthy. Validation is selection-biased after
+    # ADR-021 tuning; unfiltered test is not an RQ1 measure. All three are
+    # reported with labels (metrics.rq1 carries the designations).
+    print("Computing blocked-bootstrap CIs and DM tests (three periods)...")
     split = result.split
     cleaned = result.cleaned.frame
-    test_frame = cleaned.loc[split.test].sort_values(schema.timestamp_name)
-    for model_key in ("thesis", "baseline"):
-        predictions = result.predictions[f"{model_key}_test"].loc[test_frame.index]
-        for target in targets:
-            actual = test_frame[target].to_numpy(dtype=float)
-            predicted = predictions[target].to_numpy(dtype=float)
-            keep = ~np.isnan(actual) & ~np.isnan(predicted)
-            residual = actual[keep] - predicted[keep]
-            rq1.setdefault(model_key, {})[target] = metric_cis(residual, actual[keep])
-            test_frames[f"{model_key}_{target}"] = pd.DataFrame({"loss": (residual) ** 2})
+    boundary = split.boundaries_utc[0]
+    healthy_frame = result.healthy.frame
+    period_frames = {
+        "validation": healthy_frame[healthy_frame[schema.timestamp_name] >= boundary],
+        "monitoring_healthy": cleaned.loc[result.predictions["thesis_monitoring_healthy"].index],
+        "test": cleaned.loc[split.test],
+    }
+    rq1: dict[str, dict] = {}
     dm: dict[str, dict] = {}
-    for target in targets:
-        loss_thesis = test_frames[f"thesis_{target}"]["loss"].to_numpy()
-        loss_baseline = test_frames[f"baseline_{target}"]["loss"].to_numpy()
-        n = min(len(loss_thesis), len(loss_baseline))
-        dm[target] = diebold_mariano(loss_thesis[:n], loss_baseline[:n]).as_dict()
+    for period, frame in period_frames.items():
+        frame = frame.sort_values(schema.timestamp_name)
+        losses: dict[str, np.ndarray] = {}
+        for model_key in ("thesis", "baseline"):
+            predictions = result.predictions[f"{model_key}_{period}"].loc[frame.index]
+            for target in targets:
+                actual = frame[target].to_numpy(dtype=float)
+                predicted = predictions[target].to_numpy(dtype=float)
+                keep = ~np.isnan(actual) & ~np.isnan(predicted)
+                residual = actual[keep] - predicted[keep]
+                rq1.setdefault(period, {}).setdefault(model_key, {})[target] = metric_cis(
+                    residual, actual[keep]
+                )
+                losses[f"{model_key}_{target}"] = residual**2
+        for target in targets:
+            loss_thesis = losses[f"thesis_{target}"]
+            loss_baseline = losses[f"baseline_{target}"]
+            n = min(len(loss_thesis), len(loss_baseline))
+            dm.setdefault(period, {})[target] = diebold_mariano(
+                loss_thesis[:n], loss_baseline[:n]
+            ).as_dict()
 
     # ---- EWMA detection on the monitoring period → coordinated → FMEA -----
     print("Detecting on the monitoring period and interpreting EVENT-001...")
@@ -316,17 +332,55 @@ def main() -> int:
         )
         rendering = chosen.render()
 
+    # ---- ADR-022/ADR-023 check: EVENT-001 window vs the RQ1 slice ----------
+    # The event window must be excluded from the healthy slice (alarm
+    # periods) while remaining fully present in the detection stream.
+    slice_frame = period_frames["monitoring_healthy"]
+    turbine_column = schema.turbine_id_name
+    timestamp_column = schema.timestamp_name
+
+    def _rows_in_event_window(frame: pd.DataFrame) -> int:
+        mask = (
+            (frame[turbine_column].astype(str) == EVENT_001.turbine)
+            & (frame[timestamp_column] >= EVENT_001.start_utc)
+            & (frame[timestamp_column] <= EVENT_001.end_utc)
+        )
+        return int(mask.sum())
+
+    event001_slice_check = {
+        "event_window_utc": [str(EVENT_001.start_utc), str(EVENT_001.end_utc)],
+        "slice_rows_in_event_window": _rows_in_event_window(slice_frame),
+        "detection_rows_in_event_window": _rows_in_event_window(period_frames["test"]),
+    }
+
     # ---- persist + print ---------------------------------------------------
     summary = {
         "experiment_id": experiment_id,
         "approved_by": args.approved_by,
         "alarm_window_stats": window_stats,
         "n_alarm_windows": len(windows),
+        "rq1_headline_period": result.metrics["rq1"]["headline_period"],
+        "rq1_period_labels": result.metrics["rq1"]["period_labels"],
         "rq1_metrics_with_cis": rq1,
         "dm_thesis_vs_baseline_squared_error": dm,
+        "rq1_slice": {
+            "monitoring_rows": result.metrics["rq1"]["monitoring_rows"],
+            "monitoring_healthy_rows": result.metrics["rq1"]["monitoring_healthy_rows"],
+            "retention_pct": result.metrics["rq1"]["monitoring_healthy_retention_pct"],
+            "exclusions": result.metrics["rq1"]["monitoring_healthy_exclusions"],
+        },
+        "event001_slice_check": event001_slice_check,
+        "tuning": {
+            "configurations_evaluated": (
+                result.fit_reports["thesis"].tuning_configurations_evaluated
+            ),
+            "selected_hyperparameters": dict(result.fit_reports["thesis"].hyperparameters),
+            "trials": list(result.fit_reports["thesis"].tuning_trials),
+        },
         "event_001": event_result.as_dict(),
         "seasonal_coverage": result.split.seasonal_coverage.as_dict(),
         "healthy_state": result.healthy_report.as_dict(),
+        "cleaning": result.metrics["cleaning"],
         "in_control": result.in_control.as_dict() if result.in_control else None,
         "n_diagnostics_in_event_window": len(diagnostics),
     }

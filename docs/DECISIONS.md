@@ -867,3 +867,52 @@ Affected modules:  M-30 (slice computation, rq1 metrics section,
                    table with labels; CIs/DM on the slice per §19),
                    scripts/run_kelmarsh_experiment.py (span-wide alarm
                    windows), thesis Chapters 3–4.
+
+## ADR-023 — D-07 ratified: split dates 2018-07-01 / 2019-02-01
+
+Status:            CLOSED (2026-08-13) — decision queue D-07 (Ruling 5 of
+                   the EXP-20260812-001 pending author rulings; closes
+                   queue Group B)
+Question:          Ratify or change the provisional chronological split:
+                   TRAIN to 2018-07-01, VALIDATION to 2019-02-01, TEST/
+                   monitoring from there (explicit dates; PROJECT.md §14).
+Decision:          Author ruling (2026-08-13): RATIFIED as run.
+Justification:     - Later training ends buy at most +1.3 °C at the warm
+                     end of ambient coverage (fully captured by a
+                     2018-09-01 boundary) and nothing at the cold end,
+                     while validation shrinks from 215 days toward 31.
+                   - Validation now serves three functions — ADR-021
+                     tuning and early stopping, M-20 in-control
+                     characterisation, and the open ADR-001 statistics
+                     branch — so its size and seasonal coverage are
+                     load-bearing for all three.
+                   - Training spans 25.9 months covering all 12 calendar
+                     months twice, clearing the §14 seasonal check.
+                   - VALIDATION_END sits 9.7 days before the ADR-017
+                     match window opens, so threshold-fitting data and
+                     detection-judging data do not overlap.
+                   - The LIM-010 icing pair (2019-02-03) stays in the
+                     monitoring period, 21.7 days before onset and safely
+                     outside the 14-day match window, where it belongs
+                     for the Chapter 5 confounder discussion.
+                   - The §14 default 70/15/15 fractions are INFEASIBLE
+                     for this dataset: the 70% boundary lands in late
+                     2019 and would put EVENT-001 in training, violating
+                     ADR-010. Explicit dates are required, not merely
+                     preferred.
+Structural finding (author-directed; recorded as a finding, not a caveat):
+                   NO ADMISSIBLE SPLIT CLOSES LIM-013. The monitoring
+                   ambient extremes fall on 2019-11-14, 2020-11-13,
+                   2019-07-25, and 2020-07-24 — all after any boundary
+                   that satisfies ADR-010 — and the entire pre-monitoring
+                   span covers only (−4.1, 38.9) °C against the
+                   monitoring period's (−7.9, 44.0) °C. The ambient
+                   extrapolation is therefore a property of the dataset
+                   combined with the EVENT-001-in-test constraint, not of
+                   the dates chosen. Chapter 5 states it as a structural
+                   limitation of the dataset, not a design shortcoming.
+                   LIM-013 updated accordingly.
+Affected modules:  M-13 (split configuration — unchanged, now ratified),
+                   scripts/run_kelmarsh_experiment.py (provisional marker
+                   on the dates removed), LIMITATIONS.md (LIM-013),
+                   docs/CHAPTER3_DECISION_QUEUE.md (Group B complete).

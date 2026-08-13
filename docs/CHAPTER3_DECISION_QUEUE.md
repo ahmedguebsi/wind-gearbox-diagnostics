@@ -95,7 +95,7 @@ Evidence tags (exactly one per item):
 
 ---
 
-## Group B — CENSUS (D-04, D-05, D-06 CLOSED 2026-08-12; D-07 remains open)
+## Group B — CENSUS (COMPLETE: D-04/D-05/D-06 CLOSED 2026-08-12; D-07 CLOSED 2026-08-13 → ADR-023)
 
 > D-04 CLOSED → ADR-013: status-code-derived events qualified by duration
 > and preceding-thermal-coverage; tier ALARM-LEVEL ONLY; EVENT-001 (code
@@ -146,7 +146,13 @@ Evidence tags (exactly one per item):
 - **Blocked until closed:** M-27 event metrics, lead-time computation,
   matched-FPR event columns (M-23 outputs feeding M-27).
 
-### D-07 — Chronological split periods — VIVA RISK: **Medium**
+### D-07 — Chronological split periods — VIVA RISK: **Medium** — CLOSED (ADR-023)
+
+> RATIFIED 2026-08-13: explicit dates TRAIN_END 2018-07-01 /
+> VALIDATION_END 2019-02-01. 70/15/15 fractions recorded as infeasible
+> (would place EVENT-001 in training, violating ADR-010); rolling-origin
+> declined under ADR-022. Structural finding: no admissible split closes
+> LIM-013.
 
 - **Decision:** train/validation/test boundaries — fraction-based (70/15/15
   default) vs explicit dates, and whether rolling-origin evaluation is used

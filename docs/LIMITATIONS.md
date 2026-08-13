@@ -278,9 +278,17 @@ reversal (XGBoost best on healthy validation, linear baseline best on the
                     Consequence (author ruling, ADR-021): the next run's
                     comparison is NOT comparable to EXP-001's, and
                     EXP-001's DM result must not be cited as a finding.
+Structural finding (2026-08-13, ADR-023 — author-directed): NO ADMISSIBLE
+SPLIT CLOSES THIS LIMITATION. The monitoring ambient extremes fall on
+2019-11-14, 2020-11-13, 2019-07-25 and 2020-07-24 — all after any split
+boundary that satisfies ADR-010 (EVENT-001 in TEST) — and the entire
+pre-monitoring span covers only (−4.1, 38.9) °C. The extrapolation is a
+property of the dataset combined with the EVENT-001-in-test constraint,
+not of the dates chosen; Chapter 5 states it as a structural limitation
+of the dataset, not a design shortcoming.
 Affected RQ(s):     RQ1, RQ2
 Mitigation status:  OPEN - condition-binned normalization (D-12) and the error-vs-ambient diagnostic (PROJECT.md 20) are the named mitigations; discuss in Chapter 5
-Source:             M-13 seasonal coverage report, experiment EXP-20260812-001; ADR-021
+Source:             M-13 seasonal coverage report, experiment EXP-20260812-001; ADR-021; ADR-023
 
 ## LIM-014 — Step-change exclusions dominate healthy-state attrition
 
