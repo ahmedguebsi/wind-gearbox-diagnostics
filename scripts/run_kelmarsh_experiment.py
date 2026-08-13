@@ -260,6 +260,47 @@ def kelmarsh_inputs(
     return inputs, window_stats
 
 
+def three_period_rq1(result, schema, targets):
+    """The ADR-022 three-period RQ1 table (CIs + DM per target).
+
+    Shared with the ADR-027 nacelle ablation so both arms are computed by
+    the identical machinery. Returns (rq1, dm, period_frames).
+    """
+    split = result.split
+    cleaned = result.cleaned.frame
+    boundary = split.boundaries_utc[0]
+    healthy_frame = result.healthy.frame
+    period_frames = {
+        "validation": healthy_frame[healthy_frame[schema.timestamp_name] >= boundary],
+        "monitoring_healthy": cleaned.loc[result.predictions["thesis_monitoring_healthy"].index],
+        "test": cleaned.loc[split.test],
+    }
+    rq1: dict[str, dict] = {}
+    dm: dict[str, dict] = {}
+    for period, frame in period_frames.items():
+        frame = frame.sort_values(schema.timestamp_name)
+        losses: dict[str, np.ndarray] = {}
+        for model_key in ("thesis", "baseline"):
+            predictions = result.predictions[f"{model_key}_{period}"].loc[frame.index]
+            for target in targets:
+                actual = frame[target].to_numpy(dtype=float)
+                predicted = predictions[target].to_numpy(dtype=float)
+                keep = ~np.isnan(actual) & ~np.isnan(predicted)
+                residual = actual[keep] - predicted[keep]
+                rq1.setdefault(period, {}).setdefault(model_key, {})[target] = metric_cis(
+                    residual, actual[keep]
+                )
+                losses[f"{model_key}_{target}"] = residual**2
+        for target in targets:
+            loss_thesis = losses[f"thesis_{target}"]
+            loss_baseline = losses[f"baseline_{target}"]
+            n = min(len(loss_thesis), len(loss_baseline))
+            dm.setdefault(period, {})[target] = diebold_mariano(
+                loss_thesis[:n], loss_baseline[:n]
+            ).as_dict()
+    return rq1, dm, period_frames
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--approved-by", required=False, default=None)
@@ -301,38 +342,7 @@ def main() -> int:
     # ADR-021 tuning; unfiltered test is not an RQ1 measure. All three are
     # reported with labels (metrics.rq1 carries the designations).
     print("Computing blocked-bootstrap CIs and DM tests (three periods)...")
-    split = result.split
-    cleaned = result.cleaned.frame
-    boundary = split.boundaries_utc[0]
-    healthy_frame = result.healthy.frame
-    period_frames = {
-        "validation": healthy_frame[healthy_frame[schema.timestamp_name] >= boundary],
-        "monitoring_healthy": cleaned.loc[result.predictions["thesis_monitoring_healthy"].index],
-        "test": cleaned.loc[split.test],
-    }
-    rq1: dict[str, dict] = {}
-    dm: dict[str, dict] = {}
-    for period, frame in period_frames.items():
-        frame = frame.sort_values(schema.timestamp_name)
-        losses: dict[str, np.ndarray] = {}
-        for model_key in ("thesis", "baseline"):
-            predictions = result.predictions[f"{model_key}_{period}"].loc[frame.index]
-            for target in targets:
-                actual = frame[target].to_numpy(dtype=float)
-                predicted = predictions[target].to_numpy(dtype=float)
-                keep = ~np.isnan(actual) & ~np.isnan(predicted)
-                residual = actual[keep] - predicted[keep]
-                rq1.setdefault(period, {}).setdefault(model_key, {})[target] = metric_cis(
-                    residual, actual[keep]
-                )
-                losses[f"{model_key}_{target}"] = residual**2
-        for target in targets:
-            loss_thesis = losses[f"thesis_{target}"]
-            loss_baseline = losses[f"baseline_{target}"]
-            n = min(len(loss_thesis), len(loss_baseline))
-            dm.setdefault(period, {})[target] = diebold_mariano(
-                loss_thesis[:n], loss_baseline[:n]
-            ).as_dict()
+    rq1, dm, period_frames = three_period_rq1(result, schema, targets)
 
     # ---- EWMA detection on the monitoring period → coordinated → FMEA -----
     print("Detecting on the monitoring period and interpreting EVENT-001...")
