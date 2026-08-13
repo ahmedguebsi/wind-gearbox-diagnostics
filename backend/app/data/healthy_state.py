@@ -36,6 +36,7 @@ EXCLUSION_PRIORITY: tuple[str, ...] = (
     "maintenance_period",
     "alarm_period",
     "shutdown_or_invalid_state",
+    "author_designated_artefact",
     "sensor_failure_or_step_change",
     "curtailment",
     "below_minimum_active_power",
@@ -137,14 +138,27 @@ class HealthyStateBuilder:
                         "post_maintenance_window",
                     )
                 )
-        for step in step_changes or []:
-            half = timedelta(days=self.config.step_change_exclusion_days)
+        # ADR-018: detected step changes exclude rows only when explicitly
+        # enabled — by default the detector reports and the findings stand,
+        # but the healthy population keeps the rows.
+        if self.config.exclude_step_changes:
+            for step in step_changes or []:
+                half = timedelta(days=self.config.step_change_exclusion_days)
+                windows.append(
+                    ExclusionWindow(
+                        step.turbine,
+                        step.timestamp_utc - half,
+                        step.timestamp_utc + half,
+                        "sensor_failure_or_step_change",
+                    )
+                )
+        for manual in self.config.manual_exclusion_windows:
             windows.append(
                 ExclusionWindow(
-                    step.turbine,
-                    step.timestamp_utc - half,
-                    step.timestamp_utc + half,
-                    "sensor_failure_or_step_change",
+                    manual.turbine,
+                    pd.Timestamp(manual.start_utc),
+                    pd.Timestamp(manual.end_utc),
+                    "author_designated_artefact",
                 )
             )
 

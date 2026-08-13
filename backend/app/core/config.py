@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from app.core.errors import ConfigError
 
@@ -95,6 +95,28 @@ class ValidationConfig(StrictModel):
     )
 
 
+class ManualExclusionWindow(StrictModel):
+    """An author-designated exclusion window, cited to the ADR that ruled it.
+
+    Declares a dataset-specific period the author excluded from the healthy
+    population by explicit ruling — never derived by a detector. Applied by
+    the HealthyStateBuilder under reason ``author_designated_artefact`` and
+    recorded verbatim in every experiment's resolved config.
+    """
+
+    label: str
+    turbine: str
+    start_utc: AwareDatetime
+    end_utc: AwareDatetime
+    citation: str
+
+    @model_validator(mode="after")
+    def _window_is_ordered(self) -> ManualExclusionWindow:
+        if self.end_utc <= self.start_utc:
+            raise ValueError(f"Exclusion window {self.label!r} ends before it starts")
+        return self
+
+
 class HealthyStateConfig(StrictModel):
     """Healthy-state exclusion parameters (PROJECT.md §13).
 
@@ -103,6 +125,13 @@ class HealthyStateConfig(StrictModel):
     """
 
     exclude_alarm_periods: bool = True
+    #: ADR-018: step-change detections REPORT but do not exclude — the
+    #: EXP-20260812-001 review showed the detector firing on load-driven
+    #: thermal transitions, not recalibrations. Swept enabled/disabled so
+    #: the sensitivity suite tests the conclusion, not only the parameters.
+    exclude_step_changes: bool = provisional_field(
+        False, "Whether detected step changes exclude healthy-state rows (ADR-018: disabled)"
+    )
     fault_pre_exclusion_days: int = provisional_field(
         30, "Days excluded before a known fault", ge=0
     )
@@ -115,6 +144,7 @@ class HealthyStateConfig(StrictModel):
     step_change_exclusion_days: float = provisional_field(
         1.0, "Half-window excluded around each detected step change (days)", ge=0.0
     )
+    manual_exclusion_windows: tuple[ManualExclusionWindow, ...] = ()
 
 
 class ModelConfig(StrictModel):

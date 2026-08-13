@@ -38,7 +38,7 @@ import pandas as pd
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 
-from app.core.config import AppConfig  # noqa: E402
+from app.core.config import AppConfig, HealthyStateConfig, ManualExclusionWindow  # noqa: E402
 from app.data.guards import FeatureConfig  # noqa: E402
 from app.data.healthy_state import ExclusionWindow  # noqa: E402
 from app.data.mapping import load_mapping  # noqa: E402
@@ -65,6 +65,32 @@ VALIDATION_END = date(2019, 2, 1)  # before EVENT-001 - 14d window (ADR-010/017)
 STATUS_SKIP_LINES = 9
 BOOTSTRAP_REPLICATES = 1000
 BOOTSTRAP_SEED = 42
+
+# ADR-018: the two Kelmarsh 6 episodes whose level shifts persist WITHOUT a
+# coincident power change — the only recalibration-like candidates in the
+# 3,187-detection population. Ruled out of the healthy state by name; every
+# other step-change detection reports without excluding. Bounds follow the
+# +/-1-day convention around the detection timestamps (the February pair is
+# one episode covering both channels).
+MANUAL_EXCLUSION_WINDOWS = (
+    ManualExclusionWindow(
+        label="K6-artefact-2021-02-05",
+        turbine="Kelmarsh 6",
+        start_utc=pd.Timestamp("2021-02-04T17:50:00Z").to_pydatetime(),
+        end_utc=pd.Timestamp("2021-02-06T19:00:00Z").to_pydatetime(),
+        citation=(
+            "ADR-018: bearing -45.1 C (17:50) and oil -34.8 C (19:00) within "
+            "~1 h at |dP| ~70 kW; ~90% of the shift retained at 30 days"
+        ),
+    ),
+    ManualExclusionWindow(
+        label="K6-artefact-2021-03-05",
+        turbine="Kelmarsh 6",
+        start_utc=pd.Timestamp("2021-03-04T06:20:00Z").to_pydatetime(),
+        end_utc=pd.Timestamp("2021-03-06T06:20:00Z").to_pydatetime(),
+        citation="ADR-018: bearing +36.4 C at dP = 0; shift retained at 30 days",
+    ),
+)
 
 
 def turbine_data_paths(downloads: Path) -> list[Path]:
@@ -182,7 +208,9 @@ def main() -> int:
     windows, window_stats = alarm_windows(args.downloads)
     print(f"  {len(windows)} alarm windows; {window_stats}")
 
-    config = AppConfig()
+    config = AppConfig(
+        healthy_state=HealthyStateConfig(manual_exclusion_windows=MANUAL_EXCLUSION_WINDOWS)
+    )
     inputs = PipelineInputs(
         schema=schema,
         mapping=mapping,

@@ -22,6 +22,7 @@ EXPECTED_PROVISIONAL = sorted(
         "detection.ewma_lambda",
         "detection.persistence_min_samples",
         "evaluation.event_match_window_days",
+        "healthy_state.exclude_step_changes",
         "healthy_state.fault_pre_exclusion_days",
         "healthy_state.maintenance_post_exclusion_days",
         "healthy_state.minimum_active_power_kw",
@@ -45,6 +46,45 @@ class TestDefaultsMaterialization:
         assert resolved["residual"]["normalization"] == "mad"
         assert resolved["residual"]["threshold_stats_source"] == "training"
         assert resolved["logging"]["level"] == "INFO"
+
+    def test_step_change_exclusion_disabled_by_default(self):
+        """ADR-018: the detector reports; exclusion is an explicit opt-in."""
+        config = load_config()
+        assert config.healthy_state.exclude_step_changes is False
+        assert config.healthy_state.manual_exclusion_windows == ()
+
+    def test_manual_exclusion_window_must_be_ordered(self):
+        from app.core.config import ManualExclusionWindow
+
+        with pytest.raises(ValueError, match="ends before it starts"):
+            ManualExclusionWindow(
+                label="bad",
+                turbine="T1",
+                start_utc="2021-02-06T19:00:00Z",  # type: ignore[arg-type]
+                end_utc="2021-02-04T17:50:00Z",  # type: ignore[arg-type]
+                citation="test",
+            )
+
+    def test_manual_exclusion_windows_load_from_yaml(self, tmp_path: Path):
+        path = tmp_path / "manual.yaml"
+        path.write_text(
+            "healthy_state:\n"
+            "  manual_exclusion_windows:\n"
+            "    - label: K6-artefact-2021-02-05\n"
+            "      turbine: Kelmarsh 6\n"
+            "      start_utc: 2021-02-04T17:50:00Z\n"
+            "      end_utc: 2021-02-06T19:00:00Z\n"
+            "      citation: ADR-018\n",
+            encoding="utf-8",
+        )
+        config = load_config(path)
+        (window,) = config.healthy_state.manual_exclusion_windows
+        assert window.turbine == "Kelmarsh 6"
+        assert window.citation == "ADR-018"
+        # The resolved form must round-trip (M-03 acceptance 1).
+        resolved = tmp_path / "resolved.yaml"
+        write_resolved(config, resolved)
+        assert load_config(resolved) == config
 
     def test_partial_file_fills_remaining_defaults(self, tmp_path: Path):
         path = tmp_path / "partial.yaml"

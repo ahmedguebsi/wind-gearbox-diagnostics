@@ -269,5 +269,42 @@ Source:             M-13 seasonal coverage report, experiment EXP-20260812-001
 Date discovered:    2026-08-12
 Description:        In EXP-20260812-001, healthy-state retention over the train/validation periods is 46.2% (391,545 of 847,396 rows). The dominant exclusion is sensor_failure_or_step_change: 337,263 rows (39.8%), from the M-10 step-change heuristic (rolling-median window 144, min magnitude 5.0 C) with +/-1 day exclusion windows. Alarm periods removed 69,705 rows and the 50 kW power floor 48,883. Whether the step-change detector is identifying real recalibrations or over-firing on operational thermal swings is UNREVIEWED - its parameters were never sensitivity-tested and are not provisional-marked.
 Affected RQ(s):     RQ1 (training representativeness), RQ2 (thresholds)
-Mitigation status:  OPEN - author review of detected step changes required before the next headline run; do not retune silently
+Mitigation status:  MITIGATED (2026-08-13, ADR-018: the author reviewed the
+                    load-coincidence and persistence evidence and DISABLED
+                    step-change exclusion — the detector was firing on
+                    load-driven thermal transitions, not recalibrations, so
+                    the exclusion was removing normal operating-regime
+                    transitions from the healthy training set. The detector
+                    remains reporting-only; the two recalibration-like
+                    Kelmarsh 6 episodes are excluded by name; the parameters
+                    and an enabled/disabled variant are provisional-marked
+                    and swept by M-27. Conclusion stability is confirmed at
+                    the next headline run's sensitivity pass.)
 Source:             M-12 HealthyStateReport, experiment EXP-20260812-001
+
+## LIM-015 — Guard checks cannot see tunables outside the config universe
+
+Date discovered:    2026-08-13
+Description:        The M-27 checklist test verifies that provisional-marked
+                    config fields and sensitivity grids match exactly — but
+                    both sets derive from the same universe (the config
+                    schema), so a tunable constant that never entered the
+                    config system is invisible to it. This is how the
+                    step-change detector parameters ran unswept while
+                    driving 39.8% of healthy-state attrition (LIM-014,
+                    ADR-018): they were constructor defaults, not config
+                    fields. The gap is structural — a consistency check
+                    within a declared universe cannot detect that the
+                    universe is incomplete — and closing the three
+                    step-change parameters does not close the class: other
+                    constants remain hard-coded outside the config system
+                    (e.g. the M-20 in-control material-inflation threshold,
+                    the run script's bootstrap replicate count and seed).
+                    Full finding: ADR-019.
+Affected RQ(s):     RQ1, RQ2, RQ3 (guard-architecture integrity; which
+                    values the sensitivity phase can defend)
+Mitigation status:  OPEN — closed per instance as constants are discovered
+                    and lifted into marked config fields; the structural
+                    limit is stated in Chapter 3's guard discussion
+Source:             manual (author-directed during the ADR-018 ruling
+                    review); ADR-019

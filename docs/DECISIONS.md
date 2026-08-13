@@ -518,3 +518,127 @@ Affected modules:  M-27 (event matching, lead-time computation,
                    marker; sensitivity grid 7/14/30), M-23 (event columns
                    attach at matched operating points via M-27),
                    LIMITATIONS.md (LIM-010).
+
+## ADR-018 — Step-change exclusion disabled; detector is reporting-only
+
+Status:            CLOSED (2026-08-13) — resolves LIM-014 (Ruling 1 of the
+                   EXP-20260812-001 pending author rulings)
+Question:          Do the M-10 step-change detector's exclusions stand as a
+                   healthy-state criterion? In EXP-20260812-001 they were
+                   the dominant attrition: 337,263 of 847,396 train/val
+                   rows (39.8%), from 3,187 detections whose parameters
+                   were never reviewed (LIM-014).
+Evidence:          Load-coincidence and persistence analysis of the
+                   detections (random n=99 sample, seed 42, plus all 189
+                   detections >= 30 C; detector windows replicated exactly,
+                   p95 reproduction error 0.07 C):
+                   - 94% of detections coincide with an active-power step
+                     >= 100 kW across the same windows; median |dP| 365 kW
+                     on 2.05 MW machines; signed dT–dP correlation 0.40.
+                   - The operating-state pattern is explicit: positive
+                     temperature steps run 76 kW -> 360 kW (coming to
+                     load); negative steps 313 kW -> 6 kW (going idle).
+                   - Shift retention decays to 48% at 7 days and 47% at 30
+                     days; a recalibration predicts a stable offset near
+                     100% at every horizon.
+                   - 1 of 99 sampled detections is recalibration-like
+                     (persistent shift without a coincident power move).
+                   - The >= 30 C subset is worse, not better: 97% load
+                     coincidence, 99% sign agreement, correlation 0.72 —
+                     the largest steps are start-up warm-ups and shutdown
+                     cool-downs, so raising the magnitude threshold does
+                     not rescue the exclusion.
+Decision:          Author ruling (2026-08-13).
+                   (a) Step-change exclusion is DISABLED as a healthy-state
+                       criterion (`healthy_state.exclude_step_changes:
+                       false`). The detector remains ACTIVE as a REPORTING
+                       rule: findings and step records appear in every
+                       DatasetReport; no rows are excluded on their basis.
+                       The exclusion was removing normal operating-regime
+                       transitions from the healthy training set, biasing
+                       the NBM toward steady-state behaviour and
+                       mis-calibrating it during transients — precisely
+                       where residuals are read.
+                   (b) The recalibration-like candidates are NOT silently
+                       readmitted. The two Kelmarsh 6 episodes are excluded
+                       by name as `manual_exclusion_windows` (reason
+                       `author_designated_artefact`), recorded in the run
+                       config with this ADR as citation:
+                       - K6-artefact-2021-02-05: 2021-02-04 17:50 to
+                         2021-02-06 19:00 UTC — bearing −45.1 C (17:50) and
+                         oil −34.8 C (19:00) within ~1 h at |dP| ~70 kW,
+                         ~90% of the shift retained at 30 days.
+                       - K6-artefact-2021-03-05: 2021-03-04 06:20 to
+                         2021-03-06 06:20 UTC — bearing +36.4 C at dP = 0,
+                         shift retained at 30 days.
+                       Bounds follow the ±1-day convention around the
+                       detection timestamps (the February pair is one
+                       episode covering both channels). Under the current
+                       provisional split these windows fall in the
+                       monitoring period, where no healthy-state exclusion
+                       applies — they bind if any future split (D-07)
+                       brings 2021 into train/validation, and they remove
+                       585 of Kelmarsh 6's 26,064 rows of 2021 holdings
+                       (2.24%) wherever they apply.
+                   (c) The detector parameters stay provisional-marked with
+                       their sweep grids (window 72/144/288, magnitude
+                       2.5/5.0/10.0, exclusion days 0.5/1.0/2.0), and the
+                       sensitivity suite additionally sweeps
+                       `exclude_step_changes` enabled/disabled — the suite
+                       must show the disabled-exclusion conclusion is
+                       stable, not only vary parameters within the
+                       disabled regime.
+Reproducibility:   EXP-20260812-001's stored resolved config predates
+                   `exclude_step_changes`; under the post-ADR schema it
+                   materializes the new default (false) and would rebuild a
+                   different healthy population. That experiment reproduces
+                   exactly at its recorded commit
+                   (metadata environment.git_commit 1cf94ae5d…), which is
+                   what per-experiment git hashes exist for. Defaults
+                   embody closed rulings; snapshots pin their own code.
+Affected modules:  M-03 (config: `exclude_step_changes`,
+                   `ManualExclusionWindow`), M-12 (builder gates the
+                   exclusion; applies manual windows with
+                   `author_designated_artefact` attribution), M-10
+                   (unchanged mechanics; reporting role now normative),
+                   M-27 (DEFAULT_GRIDS adds the enabled/disabled sweep),
+                   scripts/run_kelmarsh_experiment.py (named windows).
+LIM-014:           mitigation status updated to MITIGATED.
+
+## ADR-019 — Methodological finding: guard checks cannot see outside their declared universe
+
+Status:            CLOSED (2026-08-13) — recorded finding (author-directed),
+                   for Chapter 3's guard-architecture discussion
+Question:          Why did the M-27 checklist test (acceptance 2) fail to
+                   flag the step-change detector parameters as unswept
+                   provisional values, despite being built precisely to
+                   prevent unswept tunables?
+Finding:           The checklist verifies bidirectional consistency between
+                   two sets — provisional-marked config fields and
+                   sensitivity grids — but BOTH sets derive from the same
+                   universe: the Pydantic config schema. The step-change
+                   parameters lived outside that universe, as constructor
+                   defaults (`StepChangeRule(window=144, min_magnitude=5.0)`)
+                   and a keyword default (`step_change_days=1.0`), so the
+                   discovery walk never saw them and there was nothing for
+                   the grid check to be inconsistent with. PROJECT.md names
+                   its provisional values in §13 and §23 and describes the
+                   §11 step-change heuristic without flagging its
+                   constants, so neither spec nor test pointed at them.
+                   A consistency check within a declared universe cannot
+                   detect that the universe is incomplete. The gap became
+                   visible only when the first real run exposed the
+                   parameters' leverage (39.8% attrition, LIM-014).
+Residual risk:     Structural, and explicitly not closed by fixing these
+                   three parameters: other constants remain hard-coded
+                   outside the config system (illustrative, not
+                   exhaustive: the M-20 in-control
+                   `material_inflation_threshold = 2.0`; the run script's
+                   `BOOTSTRAP_REPLICATES = 1000` and seed; status-file
+                   parsing constants). Each is invisible to the checklist
+                   for the same reason the step-change parameters were.
+                   Register entry: LIM-015.
+Affected:          Chapter 3 (guard architecture discussion: what the
+                   checklist guarantees and what it structurally cannot),
+                   M-27 (unchanged code; its acceptance criterion is now
+                   documented as consistency, not completeness).

@@ -258,7 +258,29 @@ class TestHealthyState:
         assert report.findings == []
         assert report.exclusion_counts["known_fault_period"] == 11
 
-    def test_step_change_windows_excluded(self):
+    def test_step_change_windows_excluded_only_when_enabled(self):
+        """ADR-018: the enabled variant still excludes (the sensitivity
+        suite sweeps it), but it must be an explicit opt-in."""
+        from app.data.validation import StepChange
+
+        frame = synthetic_frame(days=10)
+        builder = HealthyStateBuilder(
+            HealthyStateConfig(minimum_active_power_kw=-1e9, exclude_step_changes=True),
+            default_schema(),
+        )
+        step = StepChange(
+            column="gearbox_oil_temperature",
+            turbine="T1",
+            timestamp_utc=frame["timestamp"].iloc[720],
+            magnitude=15.0,
+            before_median=50.0,
+            after_median=65.0,
+        )
+        _, report = builder.build(make_dataset(frame), step_changes=[step])
+        assert report.exclusion_counts["sensor_failure_or_step_change"] > 0
+
+    def test_step_changes_report_without_excluding_by_default(self):
+        """ADR-018: detected step changes are findings, not exclusions."""
         from app.data.validation import StepChange
 
         frame = synthetic_frame(days=10)
@@ -274,7 +296,32 @@ class TestHealthyState:
             after_median=65.0,
         )
         _, report = builder.build(make_dataset(frame), step_changes=[step])
-        assert report.exclusion_counts["sensor_failure_or_step_change"] > 0
+        assert "sensor_failure_or_step_change" not in report.exclusion_counts
+        assert report.accepted == len(frame)
+
+    def test_manual_exclusion_window_applies_with_attribution(self):
+        """ADR-018: author-designated artefact windows exclude by name."""
+        from app.core.config import ManualExclusionWindow
+
+        frame = synthetic_frame(days=10, turbine="Kelmarsh 6")
+        start = frame["timestamp"].iloc[100]
+        end = frame["timestamp"].iloc[150]
+        config = HealthyStateConfig(
+            minimum_active_power_kw=-1e9,
+            manual_exclusion_windows=(
+                ManualExclusionWindow(
+                    label="K6-artefact-test",
+                    turbine="Kelmarsh 6",
+                    start_utc=start.to_pydatetime(),
+                    end_utc=end.to_pydatetime(),
+                    citation="ADR-018 (test fixture)",
+                ),
+            ),
+        )
+        builder = HealthyStateBuilder(config, default_schema())
+        _, report = builder.build(make_dataset(frame))
+        assert report.exclusion_counts["author_designated_artefact"] == 51
+        assert report.accounting_holds()
 
 
 class TestSplitting:
