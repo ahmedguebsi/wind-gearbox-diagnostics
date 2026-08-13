@@ -385,3 +385,39 @@ Description:        EWMA in-control false-alarm inflation: empirical rate 0.1479
 Affected RQ(s):     RQ2 (detection thresholds; risk R4)
 Mitigation status:  OPEN — widen limits or justify empirically (PROJECT.md §23)
 Source:             M-20 empirical in-control characterization, experiment EXP-20260813-001
+
+## LIM-018 — No artefact screening on predictor channels
+
+Date discovered:    2026-08-13
+Description:        The M-10 validation layer screens the thermal TARGET
+                    channels for step changes and level shifts, but applies
+                    no equivalent artefact screening to PREDICTOR channels.
+                    Both predictor artefacts found in this project — the
+                    generator_speed stuck-signal episode (269 identical
+                    −576.6 RPM readings, a 39.7-h run; ADR-020) and the
+                    2019-07-25 ambient extreme check — were identified by
+                    manual investigation prompted by run findings, not by
+                    an automated rule.
+                    Residual risk, plainly: an undetected predictor
+                    artefact would propagate into model inputs and
+                    therefore into residuals, and nothing in the current
+                    pipeline would surface it. Two mitigations incidentally
+                    apply — the schema plausible-range checks catch
+                    impossible values, and the ADR-020 nullify-then-drop
+                    policy removes them — but these catch IMPOSSIBLE
+                    values, not plausible-but-wrong ones.
+                    Cross-turbine consistency is the demonstrated manual
+                    screen: see the 2019-07-25 worked example
+                    (docs/evidence/AMBIENT_EXTREME_20190725_WORKED_EXAMPLE.md),
+                    kept on file for Chapter 5's data-quality discussion.
+Affected RQ(s):     RQ1 (model inputs), RQ2 (residuals and detection
+                    states derived from them)
+Mitigation status:  ACCEPTED (2026-08-13, author ruling — deliberate,
+                    dated omission: the pipeline is complete, the
+                    remaining work is analysis, and adding a new detector
+                    at this stage would invalidate the headline run for a
+                    risk with no evidence of having materialised. The
+                    omission is recorded so it is deliberate, not
+                    overlooked.)
+Source:             manual (author ruling during the ADR-024 review);
+                    ADR-020 evidence; 2019-07-25 ambient check
