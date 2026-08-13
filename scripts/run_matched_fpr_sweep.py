@@ -32,6 +32,20 @@ membership with the pipeline's own ingestion/cleaning/split/builder code
 and verifies the row count against the stored metrics before use. Writes
 ONE additive analysis file: evaluation/matched_fpr_sweep.json.
 
+v2 extensions (author-ordered 2026-08-13, AFTER the pre-registered sweep
+ran and its verdict was accepted as the RQ2 answer; the pre-registered
+sections are unchanged):
+- SLICE CALIBRATION (SECONDARY): operating curves and matched points
+  measured on the healthy monitoring slice. Uses monitoring-period
+  healthy data — a WEAKER independence claim, stated plainly; the slice
+  excludes the full ADR-013 event span, so no event-tuning is possible.
+  Its grid extends adaptively to 40 sigma (reported) because the LIM-021
+  transfer gap pushes slice rates far above validation rates.
+- EXPLORATORY boundary sensitivity: ADR-016 verdicts recomputed at
+  isolated/sustained boundaries {2, 3, 5, 10} samples. POST-HOC — it
+  does not replace the pre-registered answer; the boundary-3 verdict is
+  listed first in every table.
+
 Usage (from backend/):
     uv run python ../scripts/run_matched_fpr_sweep.py --experiment EXP-20260813-002
 """
@@ -71,6 +85,8 @@ from app.data.splitting import (  # noqa: E402
 from app.detection.matched_fpr import (  # noqa: E402
     CoordinatedPipeline,
     DetectionPipeline,
+    OperatingCurve,
+    OperatingPoint,
     SingleSignalPipeline,
     _turbine_years,
     compare_at,
@@ -111,12 +127,17 @@ def episode_lengths(flags: pd.Series) -> list[int]:
     return [int(e - s) for s, e in zip(starts, ends, strict=True)]
 
 
-def episode_stats(pipeline: DetectionPipeline, multiplier: float) -> dict[str, object]:
+def pipeline_lengths(pipeline: DetectionPipeline, multiplier: float) -> tuple[list[int], float]:
     flag_map = pipeline.alarm_flags(multiplier)
     years = _turbine_years(flag_map)
     lengths: list[int] = []
     for flags in flag_map.values():
         lengths.extend(episode_lengths(flags))
+    return lengths, years
+
+
+def episode_stats(pipeline: DetectionPipeline, multiplier: float) -> dict[str, object]:
+    lengths, years = pipeline_lengths(pipeline, multiplier)
     isolated = sum(1 for n in lengths if n < PERSISTENCE)
     sustained = sum(1 for n in lengths if n >= PERSISTENCE)
     return {
@@ -131,27 +152,24 @@ def episode_stats(pipeline: DetectionPipeline, multiplier: float) -> dict[str, o
     }
 
 
-def adr016_verdict(union: dict[str, object], coordinated: dict[str, object]) -> dict[str, object]:
-    iso_u, iso_c = union["isolated_excursions"], coordinated["isolated_excursions"]
-    sus_u, sus_c = union["sustained_episodes"], coordinated["sustained_episodes"]
-    a_met = bool(iso_c < iso_u)  # type: ignore[operator]
+def verdict_from_counts(
+    iso_u: int, sus_u: int, iso_c: int, sus_c: int, a_u: float, a_c: float, boundary: int
+) -> dict[str, object]:
+    a_met = iso_c < iso_u
     # ADR-016(b): equivalence means within +/-20% of the baseline count; a
     # zero-baseline point is equivalent only at zero.
-    b_met = (
-        sus_c == 0 if sus_u == 0 else bool(abs(sus_c - sus_u) <= 0.2 * sus_u)  # type: ignore[operator, arg-type]
-    )
+    b_met = sus_c == 0 if sus_u == 0 else abs(sus_c - sus_u) <= 0.2 * sus_u
     if a_met and b_met:
         verdict = "met"
     elif a_met:
         verdict = "fewer isolated excursions at reduced sustained sensitivity"
     else:
         verdict = "not met"
-    a_u = float(union["achieved_fa_per_turbine_year"])  # type: ignore[arg-type]
-    a_c = float(coordinated["achieved_fa_per_turbine_year"])  # type: ignore[arg-type]
     larger = max(a_u, a_c)
     rel_diff = abs(a_u - a_c) / larger if larger > 0 else 0.0
     interpretable = rel_diff <= INTERPRETABILITY_TOLERANCE
     return {
+        "boundary_samples": boundary,
         "criterion_a_fewer_isolated": a_met,
         "criterion_b_sustained_within_20pct": b_met,
         "verdict": verdict,
@@ -163,26 +181,45 @@ def adr016_verdict(union: dict[str, object], coordinated: dict[str, object]) -> 
     }
 
 
+def adr016_verdict(union: dict[str, object], coordinated: dict[str, object]) -> dict[str, object]:
+    result = verdict_from_counts(
+        int(union["isolated_excursions"]),  # type: ignore[arg-type]
+        int(union["sustained_episodes"]),  # type: ignore[arg-type]
+        int(coordinated["isolated_excursions"]),  # type: ignore[arg-type]
+        int(coordinated["sustained_episodes"]),  # type: ignore[arg-type]
+        float(union["achieved_fa_per_turbine_year"]),  # type: ignore[arg-type]
+        float(coordinated["achieved_fa_per_turbine_year"]),  # type: ignore[arg-type]
+        PERSISTENCE,
+    )
+    result.pop("boundary_samples")
+    return result
+
+
 def slice_rate(
     pipeline: DetectionPipeline,
     multiplier: float,
-    slice_keys: dict[str, set[pd.Timestamp]],
+    slice_keys: dict[str, pd.DatetimeIndex],
 ) -> dict[str, object]:
     """FA rate on the healthy monitoring slice (row-time basis; an episode
     re-entering after an excluded gap counts once per re-entry)."""
     flag_map = pipeline.alarm_flags(multiplier)
     n_events = 0
     n_rows = 0
+    n_alarmed = 0
     for turbine, flags in flag_map.items():
-        keys = slice_keys.get(turbine, set())
+        keys = slice_keys.get(turbine)
+        if keys is None:
+            continue
         restricted = flags[flags.index.isin(keys)]
         n_rows += len(restricted)
-        n_events += sum(1 for _ in episode_lengths(restricted))
+        n_alarmed += int(restricted.sum())
+        n_events += len(episode_lengths(restricted))
     years = n_rows * SAMPLE_MINUTES / MINUTES_PER_YEAR
     return {
         "fa_per_turbine_year": (n_events / years) if years > 0 else None,
         "n_episodes": n_events,
         "n_rows": n_rows,
+        "n_alarmed": n_alarmed,
         "turbine_years_row_time": years,
     }
 
@@ -257,9 +294,9 @@ def main() -> int:
             "membership that differs from the headline run's."
         )
     timestamp_name, turbine_name = schema.timestamp_name, schema.turbine_id_name
-    slice_keys: dict[str, set[pd.Timestamp]] = {}
+    slice_keys: dict[str, pd.DatetimeIndex] = {}
     for turbine, group in healthy_slice.frame.groupby(turbine_name, observed=True):
-        slice_keys[str(turbine)] = set(group[timestamp_name])
+        slice_keys[str(turbine)] = pd.DatetimeIndex(group[timestamp_name])
 
     # ---- sweep per lambda ---------------------------------------------------
     source = partition_for(ThresholdStatsSource.TRAINING)
@@ -320,6 +357,26 @@ def main() -> int:
             union_stats = episode_stats(pipelines["single_union"], m_union)
             coord_stats = episode_stats(pipelines["coordinated"], m_coord)
             years = float(union_stats["turbine_years"])  # type: ignore[arg-type]
+            # POST-HOC EXPLORATORY boundary sensitivity (author-permitted
+            # 2026-08-13). Does not replace the pre-registered answer; the
+            # boundary-3 verdict is listed first.
+            union_lengths, _ = pipeline_lengths(pipelines["single_union"], m_union)
+            coord_lengths, _ = pipeline_lengths(pipelines["coordinated"], m_coord)
+            a_u = float(union_stats["achieved_fa_per_turbine_year"])  # type: ignore[arg-type]
+            a_c = float(coord_stats["achieved_fa_per_turbine_year"])  # type: ignore[arg-type]
+            exploratory = [
+                verdict_from_counts(
+                    sum(1 for n in union_lengths if n < b),
+                    sum(1 for n in union_lengths if n >= b),
+                    sum(1 for n in coord_lengths if n < b),
+                    sum(1 for n in coord_lengths if n >= b),
+                    a_u,
+                    a_c,
+                    b,
+                )
+                | {"pre_registered": b == PERSISTENCE}
+                for b in (PERSISTENCE, 2, 5, 10)
+            ]
             row.update(
                 {
                     "reachable": True,
@@ -336,9 +393,73 @@ def main() -> int:
                             test_pipelines["coordinated"], m_coord, slice_keys
                         ),
                     },
+                    "exploratory_boundary_sensitivity": {
+                        "label": (
+                            "POST-HOC EXPLORATORY (author-permitted 2026-08-13): "
+                            "does not replace the pre-registered answer; the "
+                            "pre-registered boundary (3 samples) is listed first"
+                        ),
+                        "verdicts": exploratory,
+                    },
                 }
             )
             matched_detail.append(row)
+
+        # ---- SECONDARY: slice-calibrated points (weaker independence) -----
+        # Uses monitoring-period healthy data; the slice excludes the full
+        # ADR-013 event span, so no event-tuning is possible. Grid extends
+        # adaptively to 40 sigma because of the LIM-021 transfer gap.
+        slice_grid = list(grid)
+        while slice_grid[-1] < 40.0:
+            strictest_slice = min(
+                float(
+                    slice_rate(test_pipelines[name], slice_grid[-1], slice_keys)[
+                        "fa_per_turbine_year"
+                    ]  # type: ignore[arg-type]
+                )
+                for name in ("single_union", "coordinated")
+            )
+            if strictest_slice <= min(FPR_TARGETS):
+                break
+            slice_grid.append(slice_grid[-1] + 2.0)
+        slice_curves: dict[str, OperatingCurve] = {}
+        for name in ("single_union", "coordinated"):
+            points = []
+            for m in slice_grid:
+                stats = slice_rate(test_pipelines[name], m, slice_keys)
+                points.append(
+                    OperatingPoint(
+                        multiplier=float(m),
+                        false_alarms_per_turbine_year=float(stats["fa_per_turbine_year"]),  # type: ignore[arg-type]
+                        alarm_fraction=(
+                            int(stats["n_alarmed"]) / int(stats["n_rows"])  # type: ignore[call-overload]
+                            if stats["n_rows"]
+                            else 0.0
+                        ),
+                        n_alarm_events=int(stats["n_episodes"]),  # type: ignore[call-overload]
+                        n_points=int(stats["n_rows"]),  # type: ignore[call-overload]
+                    )
+                )
+            slice_curves[name] = OperatingCurve(pipeline=f"{name}_slice", points=tuple(points))
+        slice_matched = []
+        for fpr_target in FPR_TARGETS:
+            entry: dict[str, object] = {"fpr_target": fpr_target}
+            for name in ("single_union", "coordinated"):
+                m = matched_multiplier(slice_curves[name], fpr_target)
+                if m is None:
+                    entry[name] = {"reachable": False}
+                    continue
+                achieved = slice_rate(test_pipelines[name], m, slice_keys)
+                validation_at_m = episode_stats(pipelines[name], m)
+                entry[name] = {
+                    "reachable": True,
+                    "multiplier": m,
+                    "achieved_slice_fa_per_turbine_year": achieved["fa_per_turbine_year"],
+                    "validation_fa_per_turbine_year_at_multiplier": (
+                        validation_at_m["achieved_fa_per_turbine_year"]
+                    ),
+                }
+            slice_matched.append(entry)
 
         # fairness symmetry on real data: identical pipelines, zero difference
         mirror = CoordinatedPipeline("coordinated_mirror", validation_series, min_coordinated=None)
@@ -354,6 +475,18 @@ def main() -> int:
             "curves": {name: curve.as_dict() for name, curve in curves.items()},
             "comparison": comparison.as_dict(),
             "matched_detail": matched_detail,
+            "slice_calibration": {
+                "label": (
+                    "SECONDARY (author ruling 2026-08-13): calibrated on the "
+                    "healthy monitoring slice — monitoring-period healthy data, "
+                    "a WEAKER independence claim than validation selection; the "
+                    "slice excludes the full ADR-013 event span, so no "
+                    "event-tuning is possible"
+                ),
+                "grid_max_multiplier": slice_grid[-1],
+                "curves": {n: c.as_dict() for n, c in slice_curves.items()},
+                "matched": slice_matched,
+            },
             "symmetry_check": {
                 "curves_identical": bool(symmetry_curves_equal),
                 "matched_multipliers_identical": bool(symmetry_matches_equal),
@@ -401,6 +534,22 @@ def main() -> int:
                 f"ach={c['achieved_fa_per_turbine_year']:.2f} iso={c['isolated_excursions']} "
                 f"sus={c['sustained_episodes']} | {verdict}"
             )
+        print("  -- SECONDARY slice-calibrated (weaker independence claim) --")
+        calibration = block["slice_calibration"]  # type: ignore[index]
+        print(f"  slice grid max multiplier: {calibration['grid_max_multiplier']}")
+        for entry in calibration["matched"]:
+            parts = [f"  slice t={entry['fpr_target']:>6}/ty:"]
+            for name in ("single_union", "coordinated"):
+                info = entry[name]
+                if not info.get("reachable"):
+                    parts.append(f"{name} UNREACHABLE")
+                    continue
+                parts.append(
+                    f"{name} m={info['multiplier']:.2f} "
+                    f"slice_ach={info['achieved_slice_fa_per_turbine_year']:.2f} "
+                    f"(val {info['validation_fa_per_turbine_year_at_multiplier']:.2f})"
+                )
+            print(" | ".join(parts))
     return 0
 
 
