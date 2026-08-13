@@ -491,6 +491,35 @@ Mitigation status:  OPEN — handled at selection per the author's ruling
 Source:             EXP-20260813-002 matched_fpr_sweep.json (slice_check
                     columns); author ruling 2026-08-13
 
+## LIM-022 — Descriptive finding: only coordination reaches low out-of-period FA rates
+
+Date discovered:    2026-08-13
+Description:        DESCRIPTIVE, POST-HOC finding from the EXP-20260813-002
+                    matched-FPR sweep's slice calibration — explicitly NOT
+                    the ADR-016 verdict, and it does not amend the
+                    pre-registered answer (which is predominantly
+                    not-met and stands as computed).
+                    On the healthy monitoring slice, single_union cannot
+                    reach operationally low false-alarm rates at any
+                    multiplier within the swept grid: nothing below
+                    ~20/turbine-year at λ=0.1 even at 40σ, nothing below
+                    ~10–20/turbine-year at the other lambdas. The
+                    coordinated pipeline reaches 0.5–2/turbine-year at
+                    every λ. Out-of-period, the coincidence requirement is
+                    what makes low-false-alarm operation achievable at
+                    all.
+                    This is the practically consequential result and
+                    belongs in Chapter 5 ALONGSIDE the pre-registered
+                    verdict — both reported, neither suppressed.
+Affected RQ(s):     RQ2 (the practical case for coordination), RQ3
+                    (operational alert volume)
+Mitigation status:  ACCEPTED (author ruling 2026-08-13 — recorded with
+                    the post-hoc labelling discipline: the pre-registered
+                    verdict is stated first wherever this finding
+                    appears)
+Source:             EXP-20260813-002 matched_fpr_sweep.json
+                    (slice_calibration); author ruling 2026-08-13
+
 ## LIM-019 — EWMA in-control false-alarm inflation (EXP-20260813-002)
 
 Date discovered:    2026-08-13

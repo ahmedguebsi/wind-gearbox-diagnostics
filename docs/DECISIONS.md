@@ -541,6 +541,13 @@ as the RQ2 answer):
                    alternative-boundary analysis is exploratory only,
                    reported separately with the pre-registered verdict
                    stated first.
+Robustness (author-accepted 2026-08-13): the exploratory boundary
+                   sensitivity shows the not-met pattern HOLDS at
+                   isolated/sustained boundaries 2, 5, and 10 samples —
+                   every not-met point stays not-met at all four
+                   boundaries; only the two met points are unstable. The
+                   pre-registered verdict is therefore not an artefact of
+                   the 3-sample boundary choice.
 
 ## ADR-017 — Event-matching window
 
@@ -1032,3 +1039,64 @@ Outcome:           EXP-20260813-002 (2026-08-13). Slice check: detection
                    record. Validation and unfiltered-test metrics are
                    bit-identical to EXP-20260813-001, confirming the
                    exclusion touched the metrics slice only.
+
+## ADR-025 — Detection operating points selected (PRIMARY and SECONDARY)
+
+Status:            CLOSED (2026-08-13) — author selection on the
+                   EXP-20260813-002 matched-FPR sweep (ADR-016
+                   Operationalisation; LIM-021 handling ruling)
+Question:          Which operating points anchor the detection results:
+                   the EVENT-001 descriptive derivation (ADR-016
+                   secondary criterion) and every alarm-behaviour claim?
+Decision:          Author selection (2026-08-13).
+                   PRIMARY — λ = 0.2, matched at 10 false-alarm episodes
+                   per turbine-year on the healthy validation block:
+                   - single_union 11.25σ (validation 9.70/ty → measured
+                     slice rate 117.8/ty)
+                   - coordinated 10.05σ (validation 10.27/ty → measured
+                     slice rate 75.2/ty)
+                   Rationale: λ=0.2 is the pre-registered default and the
+                   M-20 in-control characterisation was performed at it;
+                   10/ty sits above the coarse-rung boundary (resolution
+                   0.285/ty, ~35 expected events — well clear of the <10
+                   flag); both pipelines achieve within 3% of target, so
+                   the composition comparison is interpretable. Stricter
+                   rungs at this λ are coarse; looser rungs are
+                   operationally meaningless.
+                   SECONDARY — λ = 0.2, calibrated at 10/ty on the
+                   healthy monitoring slice:
+                   - coordinated 20.81σ (slice 9.48/ty)
+                   - single_union UNREACHABLE at ≤30σ — reported as a
+                     RESULT, not a gap in the sweep.
+                   The SECONDARY point uses monitoring-period healthy
+                   data: a weaker independence claim, stated wherever it
+                   appears; the slice excludes the full ADR-013 event
+                   span, so no event-tuning is possible.
+Reporting rule:    every table reports the nominal target BESIDE the
+                   measured slice rates — the gap IS the LIM-021 finding,
+                   not a caveat on it.
+Affected:          EVENT-001 derivation (descriptive, ADR-016 secondary,
+                   `inferential_allowed = false`), M-28 comparison
+                   tables, Chapter 5.
+
+## ADR-026 — Methodological finding: EWMA control-chart theory degrades on serially correlated SCADA residuals
+
+Status:            CLOSED (2026-08-13) — recorded finding
+                   (author-directed), for Chapter 3
+Finding:           The selected multipliers (10–21σ across the PRIMARY
+                   and SECONDARY points) are not control limits in any
+                   recognisable control-chart sense. EWMA control-chart
+                   theory is built on i.i.d. assumptions, and it degrades
+                   severely on serially correlated 10-minute SCADA
+                   thermal residuals: the 54.8× in-control false-alarm
+                   inflation at the theoretical 3σ point (LIM-011/017/019)
+                   and the 10–21σ multipliers required to reach
+                   operational false-alarm rates are TWO MEASUREMENTS OF
+                   THE SAME PHENOMENON. In effect, the "σ multiplier"
+                   functions as an empirically calibrated quantile knob,
+                   not a statistically meaningful limit; the empirical
+                   in-control characterisation mandated by PROJECT.md §23
+                   is what carries the inferential weight.
+Affected:          Chapter 3 (EWMA methodology discussion; the LOCKED-02
+                   primary treatment is retained with its limits defended
+                   empirically, not theoretically), Chapter 5.
