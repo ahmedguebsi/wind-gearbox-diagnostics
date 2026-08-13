@@ -520,6 +520,27 @@ matched-FPR sweep ran):
                    measured on the healthy validation block; sub-1/yr
                    rungs are reported with their single-event resolution
                    stated rather than omitted.
+Outcome (2026-08-13, EXP-20260813-002 matched-FPR sweep — author-accepted
+as the RQ2 answer):
+                   The pre-registered PRIMARY criterion is PREDOMINANTLY
+                   NOT MET. Of 24 reachable matched pairs across the
+                   three lambdas: met at 2 (λ=0.1 @ 2/ty; λ=0.3 @ 20/ty),
+                   not met at 10, not interpretable (achieved rates >5%
+                   apart) at 12. At every interpretable loose-to-mid rung
+                   the coordinated pipeline produced MORE isolated
+                   excursions than single_union — criterion (a) fails —
+                   driven by systematically shorter coincidence episodes
+                   (e.g. median 2.0 vs 13.5 samples at λ=0.2 @ 2/ty).
+                   The criterion and operationalisation were fixed before
+                   the sweep ran; the verdict stands as computed; NO
+                   POST-HOC REDEFINITION was made. The operationalisation
+                   interaction is registered as LIM-020 and the
+                   validation-to-monitoring FA transfer gap (10–50× at
+                   identical multipliers) as LIM-021. Fairness symmetry
+                   check passed at all three lambdas. Any
+                   alternative-boundary analysis is exploratory only,
+                   reported separately with the pre-registered verdict
+                   stated first.
 
 ## ADR-017 — Event-matching window
 

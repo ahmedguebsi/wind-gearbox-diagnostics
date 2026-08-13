@@ -215,8 +215,12 @@ Mitigation status:  MITIGATED (2026-08-12). Remote created
                     pytest incl. the M-31 fixture-reproduction test) passed:
                     https://github.com/khedhrimokhles1997-sudo/wind-gearbox-diagnostics/actions/runs/31623910742
                     (author-confirmed conclusion: Success).
-Source:             manual (author-flagged, 2026-08-12); Actions run
-                    31623910742.
+                    CLOSED (2026-08-13): re-confirmed green on the current
+                    head — commit 89cb7b3 (the session-7 ruling series,
+                    ADR-018…024 + the matched-FPR sweep script), Actions
+                    run 31719097400, conclusion Success (author-confirmed).
+Source:             manual (author-flagged, 2026-08-12); Actions runs
+                    31623910742, 31719097400.
 
 ## LIM-010 — Icing events 9 days before EVENT-001 onset (known confounder)
 
@@ -421,6 +425,71 @@ Mitigation status:  ACCEPTED (2026-08-13, author ruling — deliberate,
                     overlooked.)
 Source:             manual (author ruling during the ADR-024 review);
                     ADR-020 evidence; 2019-07-25 ambient check
+
+## LIM-020 — Persistence boundary and coincidence requirement interact in the RQ2 criterion
+
+Date discovered:    2026-08-13
+Description:        In the EXP-20260813-002 matched-FPR sweep, the
+                    coordination requirement (simultaneous breach on both
+                    targets) produces systematically SHORTER alarm
+                    episodes than single-signal union monitoring at
+                    matched episode rates — e.g. median 2.0 vs 13.5
+                    samples at λ=0.2 @ 2 FA/turbine-year — because a
+                    coincidence episode is the intersection of two
+                    exceedances and coordination runs a looser per-signal
+                    multiplier to reach the same episode rate. Coordinated
+                    episodes therefore fall below the 3-sample persistence
+                    boundary and are counted as ISOLATED excursions by the
+                    ADR-016 operationalisation. The isolated/sustained
+                    boundary and the coincidence requirement interact in a
+                    way not anticipated when the operationalisation was
+                    fixed.
+                    This is recorded as a LIMITATION OF THE PRE-REGISTERED
+                    CRITERION, NOT as grounds for revising it: the
+                    criterion was fixed before the sweep ran and its
+                    verdict stands as computed (ADR-016 Outcome).
+                    Alternative-boundary analyses are exploratory only.
+Affected RQ(s):     RQ2 (the primary criterion's construct validity)
+Mitigation status:  ACCEPTED (author ruling 2026-08-13 — the verdict
+                    stands; the interaction is discussed in Chapter 5 as
+                    a limitation of the criterion design)
+Source:             EXP-20260813-002 matched_fpr_sweep.json; author
+                    ruling 2026-08-13
+
+## LIM-021 — Validation-to-monitoring false-alarm transfer gap
+
+Date discovered:    2026-08-13
+Description:        At identical control-limit multipliers, false-alarm
+                    rates measured on the ADR-022/024 healthy monitoring
+                    slice run 10–50× the rates achieved on the healthy
+                    validation block, and the divergence GROWS toward
+                    stricter operating points (tail behaviour transfers
+                    worse than the bulk). Example: the λ=0.2 point
+                    achieving ~10 FA/turbine-year on validation shows
+                    ~118 (union) / ~75 (coordinated) FA/turbine-year on
+                    the slice; the strictest swept point (λ=0.3,
+                    validation ~0.5/ty) still shows ~25–27/ty on the
+                    slice. A validation-selected operating point is
+                    therefore nominally misleading about monitoring-period
+                    false-alarm behaviour.
+                    Four candidate explanations the sweep cannot separate:
+                    (1) seasonal/covariate shift (LIM-013's warm end);
+                    (2) model ageing across 2019–2021 relative to the
+                    2016–2018 training window; (3) per-turbine drift;
+                    (4) sub-alarm degradation within the "healthy" slice.
+                    Separating them is beyond this work's scope.
+Affected RQ(s):     RQ2 (operating-point selection and every false-alarm
+                    claim); RQ3 (alert volume at any deployed point)
+Mitigation status:  OPEN — handled at selection per the author's ruling
+                    (2026-08-13): the PRIMARY operating point is selected
+                    on the validation block with its measured
+                    out-of-period rate reported alongside the nominal
+                    target (independence over nominal accuracy); a
+                    SECONDARY slice-calibrated point is reported with the
+                    weaker independence claim stated plainly. Discussed
+                    in Chapter 5.
+Source:             EXP-20260813-002 matched_fpr_sweep.json (slice_check
+                    columns); author ruling 2026-08-13
 
 ## LIM-019 — EWMA in-control false-alarm inflation (EXP-20260813-002)
 
