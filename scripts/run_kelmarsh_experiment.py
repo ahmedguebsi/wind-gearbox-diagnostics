@@ -195,20 +195,22 @@ def metric_cis(residuals: np.ndarray, actual: np.ndarray) -> dict[str, dict[str,
     return out
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--approved-by", required=False, default=None)
-    parser.add_argument(
-        "--downloads", type=Path, default=Path(r"C:\Users\mokhles.khedhri.993\Downloads")
+def kelmarsh_config() -> AppConfig:
+    """The standing Kelmarsh run configuration (ADR-018/020/021/022/023)."""
+    return AppConfig(
+        healthy_state=HealthyStateConfig(manual_exclusion_windows=MANUAL_EXCLUSION_WINDOWS)
     )
-    parser.add_argument("--artifacts", type=Path, default=REPO_ROOT / "artifacts")
-    args = parser.parse_args()
-    if not args.approved_by:
-        raise SystemExit(
-            "REFUSING TO RUN: the predictor set, split dates, and alarm-window "
-            "policy require author approval (pass --approved-by 'name date')."
-        )
 
+
+def kelmarsh_inputs(
+    downloads: Path,
+    supplier_note: str,
+    limitations_path: Path | None,
+    predictors_override: tuple[str, ...] | None = None,
+) -> tuple[PipelineInputs, dict[str, object]]:
+    """The standing Kelmarsh pipeline inputs; shared with the M-27
+    sensitivity suite and the ADR-027 ablation (which overrides the
+    predictor set)."""
     schema = default_schema()
     mapping = load_mapping(REPO_ROOT / "configs" / "kelmarsh_scada.yaml", schema)
     predictors = tuple(
@@ -225,19 +227,15 @@ def main() -> int:
             if schema.variable(spec.canonical).role is VariableRole.TARGET
         )
     )
-
-    print("Collecting status windows (Stop/Warning with populated ends)...")
-    windows, window_stats = alarm_windows(args.downloads)
-    print(f"  {len(windows)} alarm windows; {window_stats}")
-
-    config = AppConfig(
-        healthy_state=HealthyStateConfig(manual_exclusion_windows=MANUAL_EXCLUSION_WINDOWS)
-    )
+    windows, window_stats = alarm_windows(downloads)
     inputs = PipelineInputs(
         schema=schema,
         mapping=mapping,
-        source_paths=tuple(turbine_data_paths(args.downloads)),
-        feature=FeatureConfig(predictors=predictors, targets=targets),
+        source_paths=tuple(turbine_data_paths(downloads)),
+        feature=FeatureConfig(
+            predictors=predictors_override if predictors_override is not None else predictors,
+            targets=targets,
+        ),
         split_spec=SplitSpec(
             strategy=SplitStrategy.EXPLICIT_DATES,
             train_end=TRAIN_END,
@@ -256,6 +254,31 @@ def main() -> int:
         alarm_windows=tuple(windows),
         modelling_span=SPAN,
         seeds={},
+        supplier_note=supplier_note,
+        limitations_path=limitations_path,
+    )
+    return inputs, window_stats
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--approved-by", required=False, default=None)
+    parser.add_argument(
+        "--downloads", type=Path, default=Path(r"C:\Users\mokhles.khedhri.993\Downloads")
+    )
+    parser.add_argument("--artifacts", type=Path, default=REPO_ROOT / "artifacts")
+    args = parser.parse_args()
+    if not args.approved_by:
+        raise SystemExit(
+            "REFUSING TO RUN: the predictor set, split dates, and alarm-window "
+            "policy require author approval (pass --approved-by 'name date')."
+        )
+
+    schema = default_schema()
+    print("Collecting status windows (Stop/Warning with populated ends)...")
+    config = kelmarsh_config()
+    inputs, window_stats = kelmarsh_inputs(
+        args.downloads,
         supplier_note=(
             f"Kelmarsh Zenodo 10.5281/zenodo.5841833 (CC-BY-4.0); headline run under "
             f"ADR-018/020/021/022/023; approved by {args.approved_by}; split dates "
@@ -263,6 +286,9 @@ def main() -> int:
         ),
         limitations_path=REPO_ROOT / "docs" / "LIMITATIONS.md",
     )
+    windows = list(inputs.alarm_windows)
+    targets = inputs.feature.targets
+    print(f"  {len(windows)} alarm windows; {window_stats}")
 
     print("Running the pipeline (this is the long step)...")
     store = ArtifactStore(args.artifacts)

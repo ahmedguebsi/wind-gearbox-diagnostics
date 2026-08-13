@@ -240,25 +240,26 @@ Description:        Kelmarsh 1 logged an icing pair on 2019-02-03 04:00:30
                     were examined; it also bounds the ADR-017 matching
                     window (a window beyond ~14 days would capture it).
 Affected RQ(s):     RQ2, RQ3 (EVENT-001 case-study interpretation).
-Mitigation status:  OPEN — Chapter 5 must distinguish icing thermal
-                    response from lubrication degradation when interpreting
-                    early-February residual behaviour; recorded here so the
-                    distinction is pre-committed, not post-hoc.
-Chapter 5 obligation (author ruling 2026-08-13, on the ADR-025 EVENT-001
-derivation): the selected-point detection (2019-02-11 17:10 UTC) sits
-8.2 days after the icing episode ended. Chapter 5 must address whether
-the residual excursion reflects lubrication degradation or lingering
-icing-related thermal behaviour, and must state plainly if the available
-evidence cannot separate them. The 13-day lead is NOT presented as clean
-early detection without that qualification. Supporting descriptive
-evidence on file: EXP-20260813-002 evaluation/event001_context_stats.json
-and plots/event001_context_*.png (Kelmarsh 1 and fleet residual/EWMA
+Mitigation status:  ACCEPTED (2026-08-13 — the confounder MATERIALISED:
+                    the fleet evidence answered the pre-committed
+                    question, and not in favour of the case study; see
+                    LIM-023 for the finding and the reframing).
+Chapter 5 obligation (STRONGEST FORM — author ruling 2026-08-13, on the
+LIM-023 fleet finding): the case study MUST report (a) that the
+detection coincides with a fleet-wide excursion following the icing
+episode, (b) that the available evidence does not support attributing
+it to gearbox degradation, and (c) that this is the outcome of a
+confounder identified BEFORE results were examined. THE 13-DAY LEAD
+MUST NEVER APPEAR AS AN EARLY-DETECTION CLAIM.
+Supporting descriptive evidence on file: EXP-20260813-002
+evaluation/event001_context_stats.json and
+plots/event001_context_*.png (Kelmarsh 1 and fleet residual/EWMA
 series, 2019-01-15 → 2019-03-10 — the fleet-coherence principle from
 docs/evidence/AMBIENT_EXTREME_20190725_WORKED_EXAMPLE.md applied to
 residuals).
 Source:             docs/evidence/KELMARSH_STATUS_VOCABULARY_2016_2021.json
                     (long_stop_or_warning_events); ADR-017 evidence review;
-                    ADR-025 outcome.
+                    ADR-025 outcome; LIM-023.
 
 ## LIM-011 — EWMA in-control false-alarm inflation (EXP-20260812-001)
 
@@ -535,6 +536,53 @@ Mitigation status:  ACCEPTED (author ruling 2026-08-13 — recorded with
                     appears)
 Source:             EXP-20260813-002 matched_fpr_sweep.json
                     (slice_calibration); author ruling 2026-08-13
+
+## LIM-023 — Finding: the 2019-02-11 excursion is fleet-wide, not a Kelmarsh 1 fault signature
+
+Date discovered:    2026-08-13
+Description:        FINDING, not a caveat (author ruling 2026-08-13, on
+                    the descriptive context series for the LIM-010
+                    discussion — EXP-20260813-002
+                    evaluation/event001_context_stats.json and
+                    plots/event001_context_*.png):
+                    EWMA maxima rise from the pre-icing window
+                    (2019-01-15 → 02-03) to the icing→detection window
+                    (02-03 → 02-11 17:10) on ALL SIX turbines, on BOTH
+                    thermal targets, and remain elevated afterwards.
+                    Kelmarsh 5's excursion (5.31 bearing / 5.65 oil) is
+                    roughly double the event turbine's (2.40 / 2.67);
+                    Kelmarsh 1 ranks THIRD on both targets (recorded from
+                    the measured table; the ruling as dictated said
+                    fourth — corrected against the data at recording).
+                    Peak absolute normalized residuals move from 2.4–3.7
+                    pre-icing to 9.6–17.2 fleet-wide from 02-03 onward.
+                    CONCLUSION FOR THE RECORD (author): by the same
+                    fleet-coherence principle used to validate the
+                    2019-07-25 ambient reading
+                    (docs/evidence/AMBIENT_EXTREME_20190725_WORKED_EXAMPLE.md),
+                    the 2019-02-11 residual excursion is a FLEET-WIDE
+                    ENVIRONMENTAL RESPONSE, not a Kelmarsh 1 fault
+                    signature. The 13-day lead cannot be attributed to
+                    the code-1860 lubrication event on this evidence.
+                    FRAMING (author): this does not invalidate EVENT-001
+                    as a case study — it changes what the case study
+                    demonstrates: the episode illustrates that
+                    coordinated thermal residuals respond to
+                    environmental disturbance in a manner not
+                    distinguishable from degradation onset at these
+                    operating points — a substantive limitation of
+                    thermal-residual monitoring, and it belongs in
+                    Chapter 5 as such.
+Affected RQ(s):     RQ2, RQ3 (what the EVENT-001 case study evidences);
+                    the thesis's thermal-residual monitoring claims
+                    broadly.
+Mitigation status:  ACCEPTED (author ruling 2026-08-13; the strongest-form
+                    Chapter 5 reporting obligation is recorded in
+                    LIM-010; the M-27 suite carries a conclusion label
+                    tracking whether the fleet-wide character is stable
+                    across configurations)
+Source:             EXP-20260813-002 event001_context_stats.json /
+                    event001_context_*.png; author ruling 2026-08-13
 
 ## LIM-019 — EWMA in-control false-alarm inflation (EXP-20260813-002)
 

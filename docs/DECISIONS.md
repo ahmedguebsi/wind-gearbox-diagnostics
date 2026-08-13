@@ -1120,3 +1120,32 @@ Finding:           The selected multipliers (10–21σ across the PRIMARY
 Affected:          Chapter 3 (EWMA methodology discussion; the LOCKED-02
                    primary treatment is retained with its limits defended
                    empirically, not theoretically), Chapter 5.
+
+## ADR-027 — Nacelle-temperature ablation (specified before execution)
+
+Status:            CLOSED (2026-08-13) — author specification. The order
+                   was originally given at mapping approval in session
+                   Q&A only; it is recorded here BEFORE execution so it
+                   exists on paper (the LIM-015/ADR-019 lesson applied to
+                   author orders).
+Varied:            the predictor set — with and without
+                   `nacelle_temperature` (refit, full pipeline, ADR-021
+                   tuning inside).
+Compared:          the RQ1 three-period table (ADR-022: healthy
+                   validation, healthy-filtered monitoring slice
+                   HEADLINE, unfiltered monitoring), both targets, with
+                   blocked-bootstrap CIs and Diebold–Mariano per §19.
+Conclusion label:  whether the RQ1 slice ordering (XGBoost vs baseline)
+                   holds in both configurations.
+Rationale:         nacelle air is partially drivetrain-heated and is
+                   therefore the least strictly exogenous of the seven
+                   predictors (the caveat recorded at mapping approval);
+                   if it is materially heated, it would soften residuals
+                   precisely when the gearbox runs hot.
+Execution:         a separate, labelled ABLATION — explicitly NOT run
+                   through the provisional-parameter registry (the
+                   grid-coverage guard rightly refuses predictor-set
+                   sweeps). Runs AFTER the registered M-27 sweeps.
+Affected:          M-30 (ablation runs via the standard pipeline),
+                   M-28 (comparison table), Chapter 3 (predictor
+                   defence), Chapter 5.
