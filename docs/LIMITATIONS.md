@@ -362,3 +362,11 @@ Mitigation status:  MITIGATED (2026-08-13, ADR-020: impossible predictor
 Source:             EXP-20260812-001 dataset_report (RANGE.IMPOSSIBLE,
                     3,226 rows); raw-file analysis during the Ruling 2
                     review; ADR-020
+
+## LIM-017 — EWMA in-control false-alarm inflation (EXP-20260813-001)
+
+Date discovered:    2026-08-13
+Description:        EWMA in-control false-alarm inflation: empirical rate 0.14799 vs i.i.d. theoretical 0.00270 (54.8x) on the healthy validation block — serial correlation invalidates the theoretical ARL (risk R4); control limits may require widening.
+Affected RQ(s):     RQ2 (detection thresholds; risk R4)
+Mitigation status:  OPEN — widen limits or justify empirically (PROJECT.md §23)
+Source:             M-20 empirical in-control characterization, experiment EXP-20260813-001
