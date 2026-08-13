@@ -724,3 +724,72 @@ Affected modules:  M-06 (schema 1.3.0), M-07 (mapping version follows),
                    detail), M-30 (per-partition metric),
                    scripts/run_kelmarsh_experiment.py (operation added),
                    LIMITATIONS.md (LIM-016).
+
+## ADR-021 — XGBoost tuning: pre-registered grid, selection rule, seed policy
+
+Status:            CLOSED (2026-08-13) — Ruling 3 of the EXP-20260812-001
+                   pending author rulings
+Question:          Is XGBoost tuned on the healthy validation block before
+                   any RQ1 headline claim (PROJECT.md §18), and under what
+                   grid, budget, and selection rule? EXP-20260812-001 ran
+                   untuned (count 0) on repo-default hyperparameters.
+Decision:          Author ruling (2026-08-13). TUNE, with a small
+                   pre-registered grid.
+                   (a) GRID (12 candidates, recorded per R9):
+                       max_depth 4/6/8 × learning_rate 0.03/0.05 ×
+                       subsample 0.8/1.0; n_estimators 600 as a ceiling
+                       with early stopping on the validation block
+                       (early_stopping_rounds 50, an implementation
+                       default recorded in config, author-changeable);
+                       colsample_bytree fixed 0.8. The swept parameters
+                       are those governing generalisation (depth,
+                       shrinkage, row subsampling). The grid is
+                       deliberately small: R9's concern is silent multiple
+                       comparison on a single validation block, and a
+                       12-candidate budget is defensible where a
+                       200-candidate search would not be.
+                       `tuning_configurations_evaluated = 12` in metadata.
+                   (b) SELECTION RULE — changed from the implemented
+                       pooled-RMSE default, which weights targets by error
+                       scale (oil would dominate bearing): the score is
+                       the MEAN OF PER-TARGET RMSE, EACH NORMALISED BY
+                       THAT TARGET'S BASELINE (linear regression)
+                       VALIDATION RMSE. Equal target weight; interpretable
+                       as mean improvement over baseline. Config-specified
+                       (`model.tuning.selection`), not hard-coded; the
+                       pooled alternative remains selectable.
+                   (c) SEED POLICY: one fixed seed (42) for all tuning
+                       fits, recorded per candidate in the trial records.
+                       No seed averaging — it would multiply the effective
+                       comparison count without a corresponding record.
+                   (d) The grid lives in config (`model.tuning`), so the
+                       exact search is part of every experiment's resolved
+                       config and provenance; per-candidate trial records
+                       (hyperparameters, seed, score, best_iteration) are
+                       persisted in metadata and the saved model.
+Validation/monitoring reversal: NOT attributed to tuning. A fourth
+                   confound is added to LIM-013's record — author-judged
+                   the most likely: EXP-001's training set had ~337k rows
+                   of load transitions removed by the step-change detector
+                   (ADR-018), so the tree model saw almost only
+                   steady-state behaviour and would degrade sharply on
+                   transients, while linear regression degrades
+                   gracefully. That training set has since been ruled
+                   incorrect. The next run's comparison is therefore not
+                   comparable to EXP-20260812-001's, and **EXP-001's DM
+                   result must not be cited as a finding**.
+Implementation:    `tune_model` chokepoint (M-15 companion): causal
+                   validation first; matrices assembled from train and
+                   validation only — structurally no test data can reach a
+                   tuning search. The scored winner's fitted trees are
+                   adopted directly (the model selected IS the model
+                   used). The baseline fits first in the runner because
+                   the selection rule divides by its per-target validation
+                   RMSE; `include_baseline: false` with the ADR-021
+                   selection is refused fail-early.
+Affected modules:  M-03 (TuningConfig/TuningSelection), M-15 (tune_model
+                   chokepoint; FitReport.tuning_trials), M-16 (tune
+                   rework: selection metrics, early stopping, trial
+                   records), M-29 (ModelMetadata.tuning_trials), M-30
+                   (runner wiring), LIMITATIONS.md (LIM-013 fourth
+                   confound).

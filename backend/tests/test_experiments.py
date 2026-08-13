@@ -60,17 +60,30 @@ SCHEMA = default_schema()
 
 
 def _config(**overrides) -> AppConfig:
-    """Fast fixture config: small XGBoost so the E2E pipeline stays quick."""
-    payload = {"model": {"hyperparameters": {"n_estimators": 20, "max_depth": 3}}}
+    """Fast fixture config: small XGBoost, tuning off, so E2E stays quick.
+
+    The ADR-021 tuning path has its own dedicated E2E test with a
+    single-candidate grid.
+    """
+    payload = {
+        "model": {
+            "hyperparameters": {"n_estimators": 20, "max_depth": 3},
+            "tuning": {"enabled": False},
+        }
+    }
     payload.update(overrides)
     return AppConfig.model_validate(payload)
 
 
-def _write_fixture_csv(path: Path, rows: int = 240, low_power_tail: int = 0) -> Path:
+def _write_fixture_csv(
+    path: Path, rows: int = 240, low_power_tail: int = 0, noisy: bool = False
+) -> Path:
     """Synthetic 10-minute SCADA export, one turbine, deterministic values.
 
     ``low_power_tail`` rows at the end carry 10 kW — below the healthy-state
     power floor — to exercise the unfiltered-monitoring semantics.
+    ``noisy`` adds a deterministic non-linear perturbation so the linear
+    baseline's RMSE is non-zero (the ADR-021 selection rule divides by it).
     """
     import pandas as pd
 
@@ -80,8 +93,9 @@ def _write_fixture_csv(path: Path, rows: int = 240, low_power_tail: int = 0) -> 
         wind = 4.0 + (i % 40) * 0.2
         power = 10.0 if i >= rows - low_power_tail else 200.0 + (i % 40) * 40.0
         ambient = 5.0 + (i % 24) * 0.5
-        oil = 45.0 + (i % 40) * 0.3
-        bearing = 55.0 + (i % 40) * 0.25
+        wiggle = ((i * 37) % 17) * 0.08 if noisy else 0.0
+        oil = 45.0 + (i % 40) * 0.3 + wiggle
+        bearing = 55.0 + (i % 40) * 0.25 + wiggle
         lines.append(f"{stamp:%Y-%m-%d %H:%M:%S},T1,{wind},{power},{ambient},{oil},{bearing}")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
@@ -286,6 +300,52 @@ class TestModelStages:
         assert record.model.tuning_configurations_evaluated == 0
         assert "G4" in record.guards.validated
         assert record.seeds["model"] == 42
+
+    def test_tuned_run_records_grid_and_trials(self, tmp_path, mapping, store):
+        """ADR-021 wiring: the config-declared grid tunes on the healthy
+        validation block; the count and per-candidate trials land in
+        metadata; the selection rule is baseline-normalized."""
+        csv = _write_fixture_csv(tmp_path / "scada_noisy.csv", noisy=True)
+        inputs = PipelineInputs(
+            schema=SCHEMA,
+            mapping=mapping,
+            source_paths=(csv,),
+            feature=FeatureConfig(
+                predictors=(WIND_SPEED, ACTIVE_POWER, AMBIENT_TEMPERATURE),
+                targets=(GEARBOX_OIL_TEMPERATURE, GEARBOX_BEARING_TEMPERATURE),
+            ),
+            split_spec=SplitSpec(),
+            cleaning_operations=("drop_missing_any_target",),
+        )
+        config = _config(
+            model={
+                "tuning": {
+                    "max_depth_grid": [2, 3],
+                    "learning_rate_grid": [0.1],
+                    "subsample_grid": [1.0],
+                    "n_estimators": 30,
+                    "early_stopping_rounds": 5,
+                }
+            }
+        )
+        assert config.model.tuning.enabled  # default embodies the ruling
+        experiment_id, _ = run_experiment(config, inputs, store)
+        record = store.load_record(experiment_id)
+        assert record.model.tuning_configurations_evaluated == 2
+        assert len(record.model.tuning_trials) == 2
+        for trial in record.model.tuning_trials:
+            assert trial["seed"] == 42
+            assert trial["score"] > 0
+        assert record.model.hyperparameters["max_depth"] in {2, 3}
+        assert record.model.hyperparameters["colsample_bytree"] == 0.8
+        resolved = record.resolved_config
+        assert resolved["model"]["tuning"]["selection"] == "baseline_normalized_mean_rmse"
+
+    def test_tuning_without_baseline_rejected(self, inputs):
+        """ADR-021: the selection rule needs the baseline's validation RMSE."""
+        config = _config(model={"include_baseline": False, "tuning": {"n_estimators": 10}})
+        with pytest.raises(ConfigError, match="include_baseline"):
+            run_pipeline(config, inputs)
 
     def test_condition_binned_rejected_before_any_file_is_read(self, inputs):
         config = _config(residual={"normalization": "condition_binned"})

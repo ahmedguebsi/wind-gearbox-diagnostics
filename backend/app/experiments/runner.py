@@ -26,9 +26,16 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
-from app.core.config import AppConfig, NormalizationMethod, config_hash, resolved_dict
+from app.core.config import (
+    AppConfig,
+    NormalizationMethod,
+    TuningSelection,
+    config_hash,
+    resolved_dict,
+)
 from app.core.errors import ConfigError
 from app.core.limitations import append_limitation
 from app.core.logging import experiment_logging, get_logger
@@ -59,7 +66,7 @@ from app.experiments.tracker import (
     ModelMetadata,
     SplitMetadata,
 )
-from app.models.base import FitReport, NormalBehaviourModel, fit_model
+from app.models.base import FitReport, NormalBehaviourModel, fit_model, tune_model
 from app.models.metrics import compute_per_target
 from app.models.registry import create as create_model
 from app.residuals.engine import ResidualFrame, compute_residuals
@@ -260,37 +267,87 @@ def run_pipeline(config: AppConfig, inputs: PipelineInputs) -> PipelineResult:
     )
 
 
+def _per_target_rmse(
+    frame: pd.DataFrame, predicted: pd.DataFrame, targets: tuple[str, ...]
+) -> dict[str, float]:
+    return {
+        target: float(
+            np.sqrt(np.mean((frame[target].to_numpy() - predicted[target].to_numpy()) ** 2))
+        )
+        for target in targets
+    }
+
+
 def _fit_and_predict(
     config: AppConfig, inputs: PipelineInputs, partitions: dict[str, pd.DataFrame]
 ) -> tuple[dict[str, NormalBehaviourModel], dict[str, FitReport], dict[str, pd.DataFrame]]:
-    """Fit thesis (+ baseline) through the M-15 chokepoint; predict val/test.
+    """Fit thesis (+ baseline) through the M-15/ADR-021 chokepoints;
+    predict val/test.
 
     Training-partition predictions are also produced because the ADR-001
     ``threshold_stats_source: training`` branch fits its statistics there.
+    The baseline fits first: the ADR-021 selection rule normalises each
+    target's candidate RMSE by the baseline's validation RMSE.
     """
     seed = config.model.seed
-    models = {
-        THESIS_KEY: create_model(
-            config.model.name,
-            hyperparameters=dict(config.model.hyperparameters),
-            multi_output=config.model.multi_output,
-        )
-    }
-    if config.model.include_baseline:
-        models[BASELINE_KEY] = create_model(BASELINE_MODEL_NAME)
-
+    tuning = config.model.tuning
+    predictors = list(inputs.feature.predictors)
+    models: dict[str, NormalBehaviourModel] = {}
     fit_reports: dict[str, FitReport] = {}
     predictions: dict[str, pd.DataFrame] = {}
-    for key, model in models.items():
-        fit_reports[key] = fit_model(
-            model, partitions["training"], inputs.feature, inputs.schema, seed=seed
+
+    if config.model.include_baseline:
+        baseline = create_model(BASELINE_MODEL_NAME)
+        models[BASELINE_KEY] = baseline
+        fit_reports[BASELINE_KEY] = fit_model(
+            baseline, partitions["training"], inputs.feature, inputs.schema, seed=seed
         )
         for partition, frame in partitions.items():
-            if key == BASELINE_KEY and partition == "training":
+            if partition == "training":
                 continue  # baseline residuals are never thresholded (RQ1 context only)
-            predictions[f"{key}_{partition}"] = model.predict(
-                frame[list(inputs.feature.predictors)]
+            predictions[f"{BASELINE_KEY}_{partition}"] = baseline.predict(frame[predictors])
+
+    thesis_hyperparameters = dict(config.model.hyperparameters)
+    if tuning.enabled:
+        # ADR-021 fixed values govern the search; candidates sweep the rest.
+        thesis_hyperparameters["n_estimators"] = tuning.n_estimators
+        thesis_hyperparameters["colsample_bytree"] = tuning.colsample_bytree
+    thesis = create_model(
+        config.model.name,
+        hyperparameters=thesis_hyperparameters,
+        multi_output=config.model.multi_output,
+    )
+    models[THESIS_KEY] = thesis
+    if tuning.enabled:
+        baseline_rmse: dict[str, float] | None = None
+        if tuning.selection is TuningSelection.BASELINE_NORMALIZED_MEAN_RMSE:
+            if not config.model.include_baseline:
+                raise ConfigError(
+                    "baseline_normalized_mean_rmse selection requires include_baseline (ADR-021)"
+                )
+            baseline_rmse = _per_target_rmse(
+                partitions["validation"],
+                predictions[f"{BASELINE_KEY}_validation"],
+                inputs.feature.targets,
             )
+        fit_reports[THESIS_KEY] = tune_model(
+            thesis,
+            partitions["training"],
+            partitions["validation"],
+            inputs.feature,
+            inputs.schema,
+            candidates=tuning.candidates(),
+            seed=seed,
+            selection=tuning.selection.value,
+            baseline_validation_rmse=baseline_rmse,
+            early_stopping_rounds=tuning.early_stopping_rounds,
+        )
+    else:
+        fit_reports[THESIS_KEY] = fit_model(
+            thesis, partitions["training"], inputs.feature, inputs.schema, seed=seed
+        )
+    for partition, frame in partitions.items():
+        predictions[f"{THESIS_KEY}_{partition}"] = thesis.predict(frame[predictors])
     return models, fit_reports, predictions
 
 
@@ -458,6 +515,7 @@ def _build_record(
             model_kind=thesis_report.model_kind.value,
             hyperparameters=dict(thesis_report.hyperparameters),
             tuning_configurations_evaluated=thesis_report.tuning_configurations_evaluated,
+            tuning_trials=thesis_report.tuning_trials,
         ),
         seeds={"model": config.model.seed, **dict(inputs.seeds or {})},
         environment=capture_version_stamp(schema_version=inputs.schema.schema_version),

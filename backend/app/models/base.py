@@ -8,6 +8,7 @@ directly, so fitting is impossible without validation (M-15 acceptance 1).
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -15,6 +16,7 @@ from typing import Any, Protocol, runtime_checkable
 
 import pandas as pd
 
+from app.core.errors import ConfigError
 from app.data.guards import FeatureConfig, validate_feature_configuration
 from app.data.schema import CanonicalSchema
 
@@ -43,6 +45,9 @@ class FitReport:
     #: configurations a tuning search evaluated (0 = no search).
     tuning_configurations_evaluated: int
     seed: int
+    #: ADR-021: one record per tuning candidate (hyperparameters, seed,
+    #: score, best_iteration) so the comparisons made are on the record.
+    tuning_trials: tuple[dict[str, Any], ...] = ()
 
 
 @runtime_checkable
@@ -81,3 +86,45 @@ def fit_model(
     X = frame[list(feature.predictors)]
     y = frame[list(feature.targets)]
     return model.fit(X, y, seed=seed)
+
+
+def tune_model(
+    model: NormalBehaviourModel,
+    train_frame: pd.DataFrame,
+    validation_frame: pd.DataFrame,
+    feature: FeatureConfig,
+    schema: CanonicalSchema,
+    *,
+    candidates: Sequence[dict[str, Any]],
+    seed: int,
+    selection: str,
+    baseline_validation_rmse: Mapping[str, float] | None,
+    early_stopping_rounds: int | None,
+) -> FitReport:
+    """The single tuning chokepoint (ADR-021; PROJECT.md §18).
+
+    Causal-separation validation runs first, and the matrices assembled
+    here are train and validation ONLY — structurally, no test data can
+    reach a tuning search.
+    """
+    validate_feature_configuration(feature, schema)
+    tune = getattr(model, "tune", None)
+    if tune is None:
+        raise ConfigError("Model does not support tuning", model=type(model).__name__)
+    X_train = train_frame[list(feature.predictors)]
+    y_train = train_frame[list(feature.targets)]
+    X_validation = validation_frame[list(feature.predictors)]
+    y_validation = validation_frame[list(feature.targets)]
+    report = tune(
+        X_train,
+        y_train,
+        X_validation,
+        y_validation,
+        candidates,
+        seed=seed,
+        selection=selection,
+        baseline_validation_rmse=baseline_validation_rmse,
+        early_stopping_rounds=early_stopping_rounds,
+    )
+    assert isinstance(report, FitReport)
+    return report

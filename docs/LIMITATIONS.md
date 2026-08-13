@@ -260,9 +260,27 @@ Source:             scripts/run_kelmarsh_experiment.py alarm-window derivation
 
 Date discovered:    2026-08-12
 Description:        Seasonal coverage check (M-13, PROJECT.md 14) on the EXP-20260812-001 split: training ambient range (-4.1, 37.6) C vs monitoring-period range (-7.9, 44.0) C - the NBM extrapolates at both ambient extremes of the monitoring period, so residual inflation there may reflect seasonal covariate shift rather than degradation (risk R2). Calendar months are fully covered (26-month training window); the shortfall is range, not months.
+Confounds on record for the EXP-20260812-001 validation/monitoring
+reversal (XGBoost best on healthy validation, linear baseline best on the
+2.4-yr monitoring period, DM p≈0):
+                    (1) XGBoost was untuned (count 0; ADR-021 closes this);
+                    (2) ambient extrapolation, above;
+                    (3) the monitoring period deliberately includes
+                        anomalous operation (unfiltered by design);
+                    (4) — author-added 2026-08-13, judged the most likely —
+                        EXP-001's training set had ~337k rows of load
+                        transitions removed by the step-change detector
+                        (LIM-014/ADR-018), so the tree model saw almost
+                        only steady-state behaviour and would degrade
+                        sharply on transients, while linear regression
+                        degrades gracefully. That training set has since
+                        been ruled incorrect (ADR-018).
+                    Consequence (author ruling, ADR-021): the next run's
+                    comparison is NOT comparable to EXP-001's, and
+                    EXP-001's DM result must not be cited as a finding.
 Affected RQ(s):     RQ1, RQ2
 Mitigation status:  OPEN - condition-binned normalization (D-12) and the error-vs-ambient diagnostic (PROJECT.md 20) are the named mitigations; discuss in Chapter 5
-Source:             M-13 seasonal coverage report, experiment EXP-20260812-001
+Source:             M-13 seasonal coverage report, experiment EXP-20260812-001; ADR-021
 
 ## LIM-014 — Step-change exclusions dominate healthy-state attrition
 

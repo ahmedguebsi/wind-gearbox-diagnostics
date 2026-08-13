@@ -70,6 +70,9 @@ class ModelMetadata(StrictRecord):
     model_kind: str
     hyperparameters: dict[str, Any]
     tuning_configurations_evaluated: int
+    #: ADR-021 per-candidate records; default keeps pre-ADR-021 metadata
+    #: loadable.
+    tuning_trials: tuple[dict[str, Any], ...] = ()
 
 
 class GuardAttestations(StrictRecord):

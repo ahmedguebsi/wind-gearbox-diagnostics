@@ -213,6 +213,55 @@ class TestXGBoostNBM:
         with pytest.raises(ConfigError):
             XGBoostNBM(FAST_PARAMS).tune(X, y, X, y, [], seed=1)
 
+    def test_baseline_normalized_selection_requires_baseline_rmse(self):
+        """ADR-021: the selection rule cannot run without its denominator."""
+        X, y = _frames(60)
+        with pytest.raises(ConfigError):
+            XGBoostNBM(FAST_PARAMS).tune(
+                X,
+                y,
+                X,
+                y,
+                [{"max_depth": 2}],
+                seed=1,
+                selection="baseline_normalized_mean_rmse",
+            )
+
+    def test_adr021_trials_and_early_stopping_recorded(self):
+        """ADR-021: per-candidate trial records (params, seed, score,
+        best_iteration) land in the FitReport; the winner's scored trees
+        are adopted directly."""
+        X, y = _frames(400)
+        X_train, y_train = X.iloc[:280], y.iloc[:280]
+        X_val, y_val = X.iloc[280:], y.iloc[280:]
+        model = XGBoostNBM({"n_estimators": 40})
+        report = model.tune(
+            X_train,
+            y_train,
+            X_val,
+            y_val,
+            [{"max_depth": 2}, {"max_depth": 3}],
+            seed=42,
+            selection="baseline_normalized_mean_rmse",
+            baseline_validation_rmse={target: 1.0 for target in TARGETS},
+            early_stopping_rounds=5,
+        )
+        assert report.tuning_configurations_evaluated == 2
+        assert len(report.tuning_trials) == 2
+        scores = []
+        for trial in report.tuning_trials:
+            assert trial["seed"] == 42
+            assert trial["best_iteration"] is not None
+            scores.append(trial["score"])
+        # The adopted winner is the scored minimum.
+        winning = min(report.tuning_trials, key=lambda trial: trial["score"])
+        assert model.hyperparameters["max_depth"] == winning["hyperparameters"]["max_depth"]
+
+    def test_unknown_selection_metric_rejected(self):
+        X, y = _frames(60)
+        with pytest.raises(ConfigError):
+            XGBoostNBM(FAST_PARAMS).tune(X, y, X, y, [{"max_depth": 2}], seed=1, selection="mape")
+
     def test_predict_before_fit_rejected(self):
         X, _ = _frames(10)
         with pytest.raises(ConfigError):

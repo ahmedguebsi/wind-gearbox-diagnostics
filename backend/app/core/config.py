@@ -147,6 +147,50 @@ class HealthyStateConfig(StrictModel):
     manual_exclusion_windows: tuple[ManualExclusionWindow, ...] = ()
 
 
+class TuningSelection(StrEnum):
+    """Candidate-selection metric for the tuning search (ADR-021).
+
+    POOLED_RMSE stacks both targets' errors, so targets are weighted by
+    their error scale (oil would dominate bearing). ADR-021 selects
+    BASELINE_NORMALIZED_MEAN_RMSE: the mean of per-target RMSE, each
+    normalised by the baseline's validation RMSE for that target — equal
+    target weight, interpretable as mean improvement over baseline.
+    """
+
+    POOLED_RMSE = "pooled_rmse"
+    BASELINE_NORMALIZED_MEAN_RMSE = "baseline_normalized_mean_rmse"
+
+
+class TuningConfig(StrictModel):
+    """ADR-021 pre-registered XGBoost tuning grid (PROJECT.md §18).
+
+    Deliberately small — risk R9 is silent multiple comparison on a single
+    validation block, and a 12-candidate budget is defensible where a
+    200-candidate search would not be. The grid lives in config so every
+    experiment's resolved config carries the exact search it ran.
+    """
+
+    enabled: bool = True
+    max_depth_grid: tuple[int, ...] = Field(default=(4, 6, 8), min_length=1)
+    learning_rate_grid: tuple[float, ...] = Field(default=(0.03, 0.05), min_length=1)
+    subsample_grid: tuple[float, ...] = Field(default=(0.8, 1.0), min_length=1)
+    #: Ceiling; the effective count is chosen by early stopping on the
+    #: healthy validation block.
+    n_estimators: int = Field(default=600, ge=1)
+    early_stopping_rounds: int = Field(default=50, ge=1)
+    colsample_bytree: float = Field(default=0.8, gt=0.0, le=1.0)
+    selection: TuningSelection = TuningSelection.BASELINE_NORMALIZED_MEAN_RMSE
+
+    def candidates(self) -> tuple[dict[str, Any], ...]:
+        """Full factorial over the swept axes (12 at ADR-021 defaults)."""
+        return tuple(
+            {"max_depth": depth, "learning_rate": rate, "subsample": subsample}
+            for depth in self.max_depth_grid
+            for rate in self.learning_rate_grid
+            for subsample in self.subsample_grid
+        )
+
+
 class ModelConfig(StrictModel):
     """NBM configuration (PROJECT.md §18).
 
@@ -162,6 +206,7 @@ class ModelConfig(StrictModel):
     include_baseline: bool = True
     #: Seed for every stochastic model component; recorded per PROJECT.md §15.
     seed: int = 42
+    tuning: TuningConfig = TuningConfig()
 
 
 class ResidualConfig(StrictModel):

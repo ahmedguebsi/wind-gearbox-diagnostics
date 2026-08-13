@@ -136,6 +136,31 @@ class TestValidation:
             load_config(path)
 
 
+class TestTuningConfig:
+    def test_adr021_grid_defaults(self):
+        tuning = load_config().model.tuning
+        assert tuning.enabled
+        assert len(tuning.candidates()) == 12  # 3 depths x 2 rates x 2 subsamples
+        assert tuning.selection.value == "baseline_normalized_mean_rmse"
+        assert tuning.n_estimators == 600
+        assert tuning.early_stopping_rounds == 50
+        assert tuning.colsample_bytree == 0.8
+        # The grid is config, so every resolved config carries it (ADR-021).
+        resolved = resolved_dict(load_config())
+        assert resolved["model"]["tuning"]["max_depth_grid"] == [4, 6, 8]
+
+    def test_empty_grid_axis_rejected(self, tmp_path: Path):
+        path = tmp_path / "bad.yaml"
+        path.write_text("model:\n  tuning:\n    max_depth_grid: []\n", encoding="utf-8")
+        with pytest.raises(ConfigError):
+            load_config(path)
+
+    def test_tuning_parameters_are_not_provisional(self):
+        """ADR-021 is a closed ruling, not a provisional value: the tuning
+        grid must not enter the M-27 sensitivity universe."""
+        assert not any("tuning" in name for name in iter_provisional_parameters())
+
+
 class TestAdrEnums:
     def test_threshold_stats_source_accepts_exactly_training_and_validation(self):
         assert {member.value for member in ThresholdStatsSource} == {"training", "validation"}
