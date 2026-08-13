@@ -793,3 +793,77 @@ Affected modules:  M-03 (TuningConfig/TuningSelection), M-15 (tune_model
                    records), M-29 (ModelMetadata.tuning_trials), M-30
                    (runner wiring), LIMITATIONS.md (LIM-013 fourth
                    confound).
+
+## ADR-022 — RQ1 headline: the healthy-filtered monitoring slice
+
+Status:            CLOSED (2026-08-13) — Ruling 4 of the EXP-20260812-001
+                   pending author rulings
+Question:          Which period's accuracy metrics headline RQ1? After
+                   ADR-021 the healthy validation block is the selection
+                   block (its metrics are optimistically biased — risk R9
+                   realised), and the unfiltered monitoring period
+                   measures a different quantity (behaviour on everything
+                   that followed, conflating model error with real
+                   anomalies and the LIM-013 confounds). No existing
+                   partition was both healthy and untouched by selection.
+Decision:          Author ruling (2026-08-13).
+                   (a) HEADLINE: XGBoost and baseline accuracy computed on
+                       the HEALTHY-FILTERED SUBSET OF THE MONITORING
+                       PERIOD — the same healthy-state criteria applied to
+                       train/validation (post-ADR-018 configuration),
+                       applied to 2019-02-01 onward. Metrics: RMSE, MAE,
+                       R², bias per target, with moving-block bootstrap
+                       CIs and Diebold–Mariano per PROJECT.md §19. This is
+                       the only construction that is both healthy by the
+                       same criteria used throughout and wholly untouched
+                       by fitting or selection — the quantity RQ1 names.
+                   (b) ROLLING-ORIGIN: NOT commissioned (deliberate
+                       decline of the PROJECT.md §14 option, not an
+                       oversight): it refits the model across folds and
+                       therefore answers how well the METHOD generalises,
+                       not how well THIS model represents healthy
+                       behaviour.
+                   (c) THREE-PERIOD REPORTING: the RQ1 table reports all
+                       three periods with explicit labels —
+                       healthy validation: "selection-biased after tuning
+                       (ADR-021)"; healthy-filtered monitoring: HEADLINE;
+                       unfiltered monitoring: "conflates model error with
+                       anomalous operation and LIM-013 confounds; not an
+                       RQ1 measure". Reporting all three with labels is
+                       more honest than reporting one, and the gap between
+                       them is itself Chapter 4 material.
+                   (d) PARTITION INTEGRITY (critical): the healthy slice
+                       is an RQ1 METRICS path only. Detection, residual
+                       generation, EWMA, coordinated analysis, and all
+                       RQ2/RQ3 evaluation run on the FULL unfiltered
+                       monitoring stream per PROJECT.md §14. Enforced
+                       structurally: the slice is computed after the
+                       detection stages, feeds nothing back, subsets the
+                       already-computed test predictions (models never
+                       re-run), and a test asserts the detection path
+                       consumed every unfiltered monitoring row while the
+                       slice excluded its below-floor rows.
+Implementation:    Runner computes the slice with the same
+                   HealthyStateBuilder configuration; slice predictions
+                   persist as predictions/{thesis,baseline}_monitoring_
+                   healthy.parquet; metrics carry an ``rq1`` section with
+                   the headline designation, the period labels, and the
+                   slice's rows/retention/exclusion counts (the fraction
+                   of the monitoring period removed is stated, not
+                   inferred). The Kelmarsh run script now collects alarm
+                   windows across the FULL ADR-009 span so
+                   monitoring-period windows exist for the slice;
+                   pre-monitoring healthy-state construction is unaffected
+                   (windows outside train/validation match no rows there).
+Pre-run estimate:  from the raw holdings under the post-ADR-018/020
+                   configuration, the monitoring period holds ~740.5k
+                   usable rows, of which ~100.3k fall in alarm/manual
+                   windows and a further ~100.5k below the 50 kW floor —
+                   healthy-slice retention ≈ 72.9% (539.6k rows). The
+                   authoritative numbers are produced by the next run and
+                   recorded in its metrics.
+Affected modules:  M-30 (slice computation, rq1 metrics section,
+                   partition-integrity semantics), M-28 (three-period RQ1
+                   table with labels; CIs/DM on the slice per §19),
+                   scripts/run_kelmarsh_experiment.py (span-wide alarm
+                   windows), thesis Chapters 3–4.

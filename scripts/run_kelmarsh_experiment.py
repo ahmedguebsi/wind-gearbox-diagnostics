@@ -13,8 +13,10 @@ Run configuration (documented, provisional where noted):
   match window). D-07 remains OPEN: these dates are run configuration for
   the author to ratify, not a closed decision.
 - Alarm windows for healthy-state exclusion: status rows with Status in
-  {Stop, Warning} AND a populated Timestamp end, within the train/val
-  periods. Rows without an end cannot define a window and are counted and
+  {Stop, Warning} AND a populated Timestamp end, across the ADR-009
+  modelling span (ADR-022: monitoring-period windows feed the RQ1 healthy
+  slice only; the detection stream stays unfiltered per PROJECT.md §14).
+  Rows without an end cannot define a window and are counted and
   reported, never guessed.
 - Cleaning: drop_unparseable_timestamps, drop_missing_any_target,
   nullify_impossible_predictor_values (ADR-020), drop_missing_any_predictor
@@ -42,7 +44,7 @@ from app.core.config import AppConfig, HealthyStateConfig, ManualExclusionWindow
 from app.data.guards import FeatureConfig  # noqa: E402
 from app.data.healthy_state import ExclusionWindow  # noqa: E402
 from app.data.mapping import load_mapping  # noqa: E402
-from app.data.schema import VariableRole, default_schema  # noqa: E402
+from app.data.schema import SCHEMA_VERSION, VariableRole, default_schema  # noqa: E402
 from app.data.splitting import ExperimentFlags, SplitSpec, SplitStrategy  # noqa: E402
 from app.detection.coordinated import CoordinatedAnalyzer  # noqa: E402
 from app.evaluation.bootstrap import (  # noqa: E402
@@ -112,7 +114,10 @@ def alarm_windows(
     """
     folders = sorted(p for p in downloads.glob("Kelmarsh_SCADA_*") if p.is_dir())
     span_start = pd.Timestamp(SPAN[0], tz="UTC")
-    trainval_end = pd.Timestamp(VALIDATION_END, tz="UTC")
+    # ADR-022: windows span the FULL modelling period, not just train/val —
+    # monitoring-period windows feed the RQ1 healthy slice (metrics only);
+    # the detection stream stays unfiltered per PROJECT.md §14.
+    span_end = pd.Timestamp(SPAN[1], tz="UTC") + pd.Timedelta(days=1)
     windows: list[ExclusionWindow] = []
     rejected: list[dict[str, str]] = []
     skipped_no_end = 0
@@ -124,14 +129,14 @@ def alarm_windows(
                 path,
                 turbine=turbine,
                 skip_lines=STATUS_SKIP_LINES,
-                schema_version="1.2.0",
+                schema_version=SCHEMA_VERSION,
                 rejected=rejected,
             )
             for event in events:
                 n_rows += 1
                 if event.status not in (StatusValue.STOP, StatusValue.WARNING):
                     continue
-                if event.start_utc >= trainval_end or event.start_utc < span_start:
+                if event.start_utc >= span_end or event.start_utc < span_start:
                     continue
                 if event.end_utc is None:
                     skipped_no_end += 1
@@ -140,7 +145,7 @@ def alarm_windows(
                     ExclusionWindow(
                         turbine=event.turbine,
                         start_utc=event.start_utc,
-                        end_utc=min(event.end_utc, trainval_end),
+                        end_utc=min(event.end_utc, span_end),
                         reason="alarm_period",
                     )
                 )

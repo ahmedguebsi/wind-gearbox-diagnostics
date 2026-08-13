@@ -381,6 +381,28 @@ class TestModelStages:
         assert result.healthy_report.total == 204  # train+validation only
         test_residuals = result.residuals["test"]
         assert len(test_residuals) == 36 * 2  # every monitoring row scored
+        # ADR-022 partition integrity: the RQ1 healthy slice is a METRICS
+        # path only — detection consumed every unfiltered monitoring row,
+        # while the slice dropped the 20 below-floor rows.
+        assert result.metrics["detection"]["test_points"] == 36 * 2
+        rq1 = result.metrics["rq1"]
+        assert rq1["headline_period"] == "monitoring_healthy"
+        assert rq1["monitoring_rows"] == 36
+        assert rq1["monitoring_healthy_rows"] == 16
+        assert rq1["monitoring_healthy_exclusions"]["below_minimum_active_power"] == 20
+
+    def test_rq1_table_reports_all_three_periods(self, inputs, store):
+        """ADR-022: headline slice plus both labelled supporting periods."""
+        experiment_id, result = run_experiment(_config(), inputs, store)
+        for model_key in ("thesis", "baseline"):
+            periods = result.metrics["nbm"][model_key]
+            assert {"validation", "test", "monitoring_healthy"} <= set(periods)
+        labels = result.metrics["rq1"]["period_labels"]
+        assert "ADR-021" in labels["validation"]
+        assert "HEADLINE" in labels["monitoring_healthy"]
+        directory = store.experiment_dir(experiment_id)
+        assert (directory / "predictions" / "thesis_monitoring_healthy.parquet").is_file()
+        assert (directory / "predictions" / "baseline_monitoring_healthy.parquet").is_file()
 
     def test_reproduce_mismatch_on_tampered_prediction_file(self, inputs, store):
         """M-31 acceptance 1: predictions require EXACT match."""

@@ -220,6 +220,21 @@ def run_pipeline(config: AppConfig, inputs: PipelineInputs) -> PipelineResult:
         config, inputs, partitions, predictions
     )
 
+    # ADR-022: the RQ1 headline is the healthy-filtered monitoring slice —
+    # a METRICS path only. Detection, residuals, EWMA, and all RQ2/RQ3
+    # evaluation above consumed the FULL unfiltered test partition
+    # (PROJECT.md §14); the slice is computed after them and feeds nothing
+    # back. Slice predictions are row-subsets of the already-computed test
+    # predictions, so the models are never re-run.
+    monitoring_healthy_frame, slice_report = _monitoring_healthy_slice(
+        config, inputs, cleaned, split, dataset_report
+    )
+    for key in models:
+        predictions[f"{key}_monitoring_healthy"] = predictions[f"{key}_test"].loc[
+            monitoring_healthy_frame.index
+        ]
+    metrics_partitions = {**partitions, "monitoring_healthy": monitoring_healthy_frame}
+
     metrics: dict[str, Any] = {
         "ingestion": {
             "rows": len(dataset.frame),
@@ -247,7 +262,24 @@ def run_pipeline(config: AppConfig, inputs: PipelineInputs) -> PipelineResult:
             "test_is_unfiltered_monitoring": True,
             "seasonal_warnings": len(split.seasonal_coverage.warnings),
         },
-        "nbm": _nbm_metrics(inputs, partitions, predictions),
+        "nbm": _nbm_metrics(inputs, metrics_partitions, predictions),
+        "rq1": {
+            "headline_period": "monitoring_healthy",
+            "period_labels": {
+                "validation": "selection-biased after tuning (ADR-021)",
+                "monitoring_healthy": "RQ1 HEADLINE (ADR-022)",
+                "test": (
+                    "conflates model error with anomalous operation and "
+                    "LIM-013 confounds; not an RQ1 measure"
+                ),
+            },
+            "monitoring_rows": len(partitions["test"]),
+            "monitoring_healthy_rows": len(monitoring_healthy_frame),
+            "monitoring_healthy_retention_pct": round(
+                100.0 * len(monitoring_healthy_frame) / len(partitions["test"]), 4
+            ),
+            "monitoring_healthy_exclusions": slice_report.exclusion_counts,
+        },
         "detection": detection_metrics,
     }
     return PipelineResult(
@@ -391,6 +423,41 @@ def _residual_stages(
         "test_exceedance_points": sum(int((d.states != 0).sum()) for d in test_detections),
     }
     return normalized, dict(normalizer.fitted_stats()), in_control, detection_metrics
+
+
+def _monitoring_healthy_slice(
+    config: AppConfig,
+    inputs: PipelineInputs,
+    cleaned: CanonicalDataset,
+    split: Split,
+    dataset_report: DatasetReport,
+) -> tuple[pd.DataFrame, HealthyStateReport]:
+    """The ADR-022 RQ1 headline slice: the same healthy-state criteria as
+    train/validation, applied to the monitoring period. The returned frame
+    keeps the test partition's row index, so slice predictions subset the
+    already-computed test predictions exactly."""
+    test_frame = cleaned.frame.loc[split.test]
+    builder = HealthyStateBuilder(config.healthy_state, inputs.schema)
+    healthy, report = builder.build(
+        cleaned.with_frame(test_frame.reset_index(drop=True), stage="monitoring_healthy_slice"),
+        fault_windows=list(inputs.fault_windows),
+        alarm_windows=list(inputs.alarm_windows),
+        maintenance_windows=list(inputs.maintenance_windows),
+        step_changes=dataset_report.step_changes,
+    )
+    if healthy.frame.empty:
+        raise ConfigError(
+            "Monitoring period contains no healthy rows; the ADR-022 RQ1 "
+            "headline cannot be computed"
+        )
+    # The builder resets indices; recover the original test rows by
+    # (timestamp, turbine) key so the slice aligns with test predictions.
+    keys = [inputs.schema.timestamp_name, inputs.schema.turbine_id_name]
+    keys = [k for k in keys if k in test_frame.columns]
+    test_keys = pd.MultiIndex.from_frame(test_frame[keys])
+    slice_keys = pd.MultiIndex.from_frame(healthy.frame[keys])
+    mask = test_keys.isin(slice_keys)
+    return test_frame.loc[mask], report
 
 
 def _nbm_metrics(
