@@ -959,3 +959,17 @@ Supersession:      EXP-20260813-001's monitoring_healthy metrics were
                    shifts materially is reported with the re-run — a
                    negligible shift is itself recorded, since it shows
                    the headline is not sensitive to this decision.
+Outcome:           EXP-20260813-002 (2026-08-13). Slice check: detection
+                   stream 11,280 event-window rows, slice 0 — as ruled.
+                   Slice 538,045 rows (72.66%); the event span claimed
+                   1,772 rows under disjoint attribution (the 1,580
+                   formerly counted healthy plus 192 previously
+                   attributed to the power floor). Headline shift:
+                   NEGLIGIBLE — bearing RMSE 2.1459 → 2.1468 (+0.04%),
+                   oil 2.6283 → 2.6298 (+0.06%); R² moves in the fourth
+                   decimal; DM statistics −33.71 → −33.66 and −20.39 →
+                   −20.37 (p ≈ 0 throughout). The RQ1 headline is not
+                   sensitive to this decision, which is itself on the
+                   record. Validation and unfiltered-test metrics are
+                   bit-identical to EXP-20260813-001, confirming the
+                   exclusion touched the metrics slice only.

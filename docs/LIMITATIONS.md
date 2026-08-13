@@ -421,3 +421,11 @@ Mitigation status:  ACCEPTED (2026-08-13, author ruling — deliberate,
                     overlooked.)
 Source:             manual (author ruling during the ADR-024 review);
                     ADR-020 evidence; 2019-07-25 ambient check
+
+## LIM-019 — EWMA in-control false-alarm inflation (EXP-20260813-002)
+
+Date discovered:    2026-08-13
+Description:        EWMA in-control false-alarm inflation: empirical rate 0.14799 vs i.i.d. theoretical 0.00270 (54.8x) on the healthy validation block — serial correlation invalidates the theoretical ARL (risk R4); control limits may require widening.
+Affected RQ(s):     RQ2 (detection thresholds; risk R4)
+Mitigation status:  OPEN — widen limits or justify empirically (PROJECT.md §23)
+Source:             M-20 empirical in-control characterization, experiment EXP-20260813-002
