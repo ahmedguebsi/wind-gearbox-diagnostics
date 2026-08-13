@@ -391,6 +391,44 @@ class TestModelStages:
         assert rq1["monitoring_healthy_rows"] == 16
         assert rq1["monitoring_healthy_exclusions"]["below_minimum_active_power"] == 20
 
+    def test_event_span_window_excludes_slice_only(self, tmp_path, mapping):
+        """ADR-024: an author-designated event span leaves the detection
+        stream untouched while the RQ1 slice drops every row inside it."""
+        csv = _write_fixture_csv(tmp_path / "scada_span.csv")
+        span_inputs = PipelineInputs(
+            schema=SCHEMA,
+            mapping=mapping,
+            source_paths=(csv,),
+            feature=FeatureConfig(
+                predictors=(WIND_SPEED, ACTIVE_POWER, AMBIENT_TEMPERATURE),
+                targets=(GEARBOX_OIL_TEMPERATURE, GEARBOX_BEARING_TEMPERATURE),
+            ),
+            split_spec=SplitSpec(),
+        )
+        # 240 rows from 2020-01-01; test = last 36 rows (2020-01-02 10:00 on).
+        config = _config(
+            healthy_state={
+                "manual_exclusion_windows": [
+                    {
+                        "label": "fixture-event-span",
+                        "turbine": "T1",
+                        "start_utc": "2020-01-02T10:00:00Z",
+                        "end_utc": "2020-01-02T11:30:00Z",
+                        "citation": "ADR-024 (test fixture)",
+                        "reason": "author_designated_event_span",
+                    }
+                ]
+            }
+        )
+        result = run_pipeline(config, span_inputs)
+        # Detection consumed every unfiltered monitoring row...
+        assert result.metrics["split"]["test"] == 36
+        assert result.metrics["detection"]["test_points"] == 36 * 2
+        # ...while the slice dropped exactly the 10 in-span rows.
+        rq1 = result.metrics["rq1"]
+        assert rq1["monitoring_healthy_exclusions"]["author_designated_event_span"] == 10
+        assert rq1["monitoring_healthy_rows"] == 26
+
     def test_rq1_table_reports_all_three_periods(self, inputs, store):
         """ADR-022: headline slice plus both labelled supporting periods."""
         experiment_id, result = run_experiment(_config(), inputs, store)

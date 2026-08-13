@@ -100,8 +100,10 @@ class ManualExclusionWindow(StrictModel):
 
     Declares a dataset-specific period the author excluded from the healthy
     population by explicit ruling — never derived by a detector. Applied by
-    the HealthyStateBuilder under reason ``author_designated_artefact`` and
-    recorded verbatim in every experiment's resolved config.
+    the HealthyStateBuilder under the declared ``reason`` and recorded
+    verbatim in every experiment's resolved config. ``author_designated_
+    event_span`` (ADR-024) marks a designated event's full episode span,
+    whose clearance gaps are not healthy operation.
     """
 
     label: str
@@ -109,6 +111,9 @@ class ManualExclusionWindow(StrictModel):
     start_utc: AwareDatetime
     end_utc: AwareDatetime
     citation: str
+    reason: Literal["author_designated_artefact", "author_designated_event_span"] = (
+        "author_designated_artefact"
+    )
 
     @model_validator(mode="after")
     def _window_is_ordered(self) -> ManualExclusionWindow:

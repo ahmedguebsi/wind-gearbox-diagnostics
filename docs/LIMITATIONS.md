@@ -286,6 +286,21 @@ pre-monitoring span covers only (−4.1, 38.9) °C. The extrapolation is a
 property of the dataset combined with the EVENT-001-in-test constraint,
 not of the dates chosen; Chapter 5 states it as a structural limitation
 of the dataset, not a design shortcoming.
+Narrowing (2026-08-13, EXP-20260813-001 — author-directed record): the
+COLD-END extrapolation was ELIMINATED as a side effect of the ADR-020
+impossible-predictor policy, ruled for unrelated reasons: the −7.9 °C
+monitoring extreme rode on parked rows with impossible negative
+generator_speed readings, which the policy drops, leaving the scored
+monitoring stream at (−2.35, 43.99) °C — the cold end now inside the
+training range. The structural finding applies to the WARM END ONLY:
++6.4 °C beyond the 37.58 °C training maximum.
+Case-study reach (2026-08-13, measured): the warm-end confounder DOES NOT
+TOUCH the EVENT-001 case study. 593 of 757,683 monitoring rows (0.078%)
+exceed the training maximum, all on 10 July–August days in 2019/2020;
+ZERO fall inside the ADR-017 match window, whose ambient range is
+(4.1, 22.2) °C. The 43.99 °C maximum is a genuine fleet-coherent
+heatwave reading (2019-07-25, all six turbines 40–44 °C over a
+6.5-hour afternoon spell), not a sensor artefact.
 Affected RQ(s):     RQ1, RQ2
 Mitigation status:  OPEN - condition-binned normalization (D-12) and the error-vs-ambient diagnostic (PROJECT.md 20) are the named mitigations; discuss in Chapter 5
 Source:             M-13 seasonal coverage report, experiment EXP-20260812-001; ADR-021; ADR-023

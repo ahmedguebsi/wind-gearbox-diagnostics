@@ -68,13 +68,30 @@ STATUS_SKIP_LINES = 9
 BOOTSTRAP_REPLICATES = 1000
 BOOTSTRAP_SEED = 42
 
+# Author-designated exclusion windows.
 # ADR-018: the two Kelmarsh 6 episodes whose level shifts persist WITHOUT a
 # coincident power change — the only recalibration-like candidates in the
-# 3,187-detection population. Ruled out of the healthy state by name; every
-# other step-change detection reports without excluding. Bounds follow the
-# +/-1-day convention around the detection timestamps (the February pair is
-# one episode covering both channels).
+# 3,187-detection population. Bounds follow the +/-1-day convention around
+# the detection timestamps (the February pair is one episode covering both
+# channels).
+# ADR-024: the full ADR-013 EVENT-001 episode span — clearance gaps between
+# occurrences are relief of the filter restriction, not healthy operation,
+# so no row of the span counts as healthy for RQ1. Slice-only by
+# construction: the detection stream never passes through the
+# healthy-state builder.
 MANUAL_EXCLUSION_WINDOWS = (
+    ManualExclusionWindow(
+        label="EVENT-001-episode-span",
+        turbine="Kelmarsh 1",
+        start_utc=pd.Timestamp("2019-02-24T16:46:28Z").to_pydatetime(),
+        end_utc=pd.Timestamp("2019-05-30T07:34:04Z").to_pydatetime(),
+        reason="author_designated_event_span",
+        citation=(
+            "ADR-013 via ADR-024: ONE continuous degradation episode; rows "
+            "within the span cannot be counted as healthy regardless of "
+            "momentary alarm state (author ruling 2026-08-13)"
+        ),
+    ),
     ManualExclusionWindow(
         label="K6-artefact-2021-02-05",
         turbine="Kelmarsh 6",

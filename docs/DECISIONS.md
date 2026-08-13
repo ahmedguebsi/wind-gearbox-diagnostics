@@ -916,3 +916,46 @@ Affected modules:  M-13 (split configuration — unchanged, now ratified),
                    scripts/run_kelmarsh_experiment.py (provisional marker
                    on the dates removed), LIMITATIONS.md (LIM-013),
                    docs/CHAPTER3_DECISION_QUEUE.md (Group B complete).
+
+## ADR-024 — EVENT-001 clearance gaps excluded from the RQ1 slice
+
+Status:            CLOSED (2026-08-13) — author ruling on the
+                   EXP-20260813-001 slice check
+Question:          EXP-20260813-001's EVENT-001 slice check found the
+                   detection stream holds 11,280 rows inside the event
+                   window while the RQ1 healthy slice retained 1,580 of
+                   them — the clearance gaps between the three
+                   occurrences (4.9 + 7.45 days, turbine producing, no
+                   active Stop/Warning), which pass every healthy
+                   criterion. Do they count as healthy for RQ1?
+Decision:          Author ruling (2026-08-13): EXCLUDE them. ADR-013
+                   designates EVENT-001 as ONE continuous degradation
+                   episode (2019-02-24 16:46:28 → 2019-05-30 07:34:04).
+                   Rows from within that span cannot be counted as
+                   healthy for RQ1 regardless of whether an alarm was
+                   active at that moment — the clearance gaps are periods
+                   when the filter restriction had been temporarily
+                   relieved, not periods of healthy operation. Retaining
+                   them would contradict the event designation.
+                   The full ADR-013 episode span is a named exclusion
+                   window (`ManualExclusionWindow`, reason
+                   `author_designated_event_span`, citing ADR-013) in the
+                   run configuration.
+Scope (critical):  The exclusion applies ONLY to the RQ1 metrics slice.
+                   The detection stream continues to consume the full
+                   unfiltered monitoring partition including the entire
+                   event window — structurally guaranteed (the detection
+                   path never passes through the healthy-state builder)
+                   and asserted by test: detection sees every
+                   event-window row, the slice sees none.
+Affected modules:  M-03 (`ManualExclusionWindow.reason`), M-12 (reason
+                   routing; `author_designated_event_span` in the
+                   attribution order), M-30 (slice via the standard
+                   builder), scripts/run_kelmarsh_experiment.py (the
+                   EVENT-001 span window), tests (slice-only assertion).
+Supersession:      EXP-20260813-001's monitoring_healthy metrics were
+                   computed WITHOUT this exclusion; the re-run under this
+                   ADR becomes the RQ1 headline. Whether the headline
+                   shifts materially is reported with the re-run — a
+                   negligible shift is itself recorded, since it shows
+                   the headline is not sensitive to this decision.

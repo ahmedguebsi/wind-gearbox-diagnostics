@@ -53,6 +53,31 @@ class TestDefaultsMaterialization:
         assert config.healthy_state.exclude_step_changes is False
         assert config.healthy_state.manual_exclusion_windows == ()
 
+    def test_manual_exclusion_window_reasons(self):
+        """ADR-024: two author-designated reasons; artefact is the default;
+        anything else is rejected."""
+        from app.core.config import ManualExclusionWindow
+
+        window = ManualExclusionWindow(
+            label="w",
+            turbine="T1",
+            start_utc="2021-02-04T17:50:00Z",  # type: ignore[arg-type]
+            end_utc="2021-02-06T19:00:00Z",  # type: ignore[arg-type]
+            citation="ADR-018",
+        )
+        assert window.reason == "author_designated_artefact"
+        span = window.model_copy(update={"reason": "author_designated_event_span"})
+        assert span.reason == "author_designated_event_span"
+        with pytest.raises(ValueError):
+            ManualExclusionWindow(
+                label="w",
+                turbine="T1",
+                start_utc="2021-02-04T17:50:00Z",  # type: ignore[arg-type]
+                end_utc="2021-02-06T19:00:00Z",  # type: ignore[arg-type]
+                citation="x",
+                reason="because_i_said_so",  # type: ignore[arg-type]
+            )
+
     def test_manual_exclusion_window_must_be_ordered(self):
         from app.core.config import ManualExclusionWindow
 

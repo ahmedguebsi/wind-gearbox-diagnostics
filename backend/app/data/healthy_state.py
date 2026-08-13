@@ -36,6 +36,7 @@ EXCLUSION_PRIORITY: tuple[str, ...] = (
     "maintenance_period",
     "alarm_period",
     "shutdown_or_invalid_state",
+    "author_designated_event_span",
     "author_designated_artefact",
     "sensor_failure_or_step_change",
     "curtailment",
@@ -158,7 +159,7 @@ class HealthyStateBuilder:
                     manual.turbine,
                     pd.Timestamp(manual.start_utc),
                     pd.Timestamp(manual.end_utc),
-                    "author_designated_artefact",
+                    manual.reason,
                 )
             )
 
