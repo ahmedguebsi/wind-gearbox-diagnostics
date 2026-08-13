@@ -482,6 +482,44 @@ Affected modules:  M-23 (comparison outputs are judged against this
                    criterion; full curves mandatory), M-27 (EVENT-001
                    timestamps; `inferential_allowed` gating), M-28 (claim
                    phrasing in tables), thesis Chapters 3 and 5.
+Operationalisation (author ruling 2026-08-13, recorded BEFORE the first
+matched-FPR sweep ran):
+                   An "isolated excursion" is an alarm episode shorter
+                   than the ADR-017(b) persistence qualification
+                   (persistence_min_samples = 3); a "sustained episode"
+                   is an episode of >= 3 consecutive samples. The PRIMARY
+                   criterion is met at a matched operating point if BOTH
+                   hold:
+                   (a) the coordinated pipeline's isolated-excursion
+                       count is lower than single_union's, AND
+                   (b) the coordinated pipeline's sustained-episode count
+                       is within ±20% of single_union's.
+                   If (a) holds but (b) fails, the result is reported as
+                   "fewer isolated excursions at reduced sustained
+                   sensitivity" — a trade-off, not a criterion met. If
+                   (a) fails, the criterion is not met. The verdict is
+                   reported PER MATCHED POINT PER LAMBDA, never
+                   aggregated to a single yes/no.
+                   Interpretability condition: coordinated detection
+                   requires simultaneous breach on both targets, so it
+                   mechanically produces fewer episodes of every kind at
+                   any fixed multiplier — the comparison only means
+                   something if the matching is exact. Each matched point
+                   therefore reports the ACHIEVED false-alarm rate of
+                   both pipelines alongside the target, and any pair
+                   whose achieved rates differ by more than 5% (relative
+                   to the larger) is labelled NOT INTERPRETABLE rather
+                   than read as a result.
+                   Baseline: "single-signal monitoring" is operationalised
+                   as single_union (alarm when either target's stream
+                   exceeds — coordination threshold 1 of 2), the
+                   operational meaning of monitoring each signal
+                   independently; per-target curves are reported as
+                   context. FPR target ladder: {200, 100, 50, 20, 10, 5,
+                   2, 1, 0.5} false-alarm episodes per turbine-year,
+                   measured on the healthy validation block; sub-1/yr
+                   rungs are reported with their single-event resolution
+                   stated rather than omitted.
 
 ## ADR-017 — Event-matching window
 
