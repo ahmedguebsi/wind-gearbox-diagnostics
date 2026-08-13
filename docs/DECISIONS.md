@@ -1078,6 +1078,26 @@ Reporting rule:    every table reports the nominal target BESIDE the
 Affected:          EVENT-001 derivation (descriptive, ADR-016 secondary,
                    `inferential_allowed = false`), M-28 comparison
                    tables, Chapter 5.
+Outcome (2026-08-13, EVENT-001 derivation accepted as reported; recorded
+without softening):
+                   At the validation-matched PRIMARY point both pipelines
+                   detect ~13 days ahead of the code-1860 alarm —
+                   coordinated first persistent exceedance 2019-02-11
+                   17:10 UTC (lead 12.98 d), single_union 2019-02-11
+                   15:30 (lead 13.05 d, marginally earlier). At the
+                   slice-calibrated SECONDARY point the coordinated
+                   pipeline does NOT detect within the 14-day window (0
+                   persistent exceedances), while single_union at the
+                   same multiplier — not rate-matched; unreachable at
+                   10 FA/ty on the slice — does (13.0 d).
+                   Mechanistically consistent with LIM-022: the
+                   coincidence requirement trades sensitivity for
+                   specificity, producing BOTH the lower out-of-period
+                   false-alarm rates AND the missed marginal detection.
+                   Descriptive throughout; `inferential_allowed` false.
+                   The Chapter 5 icing qualification is recorded in
+                   LIM-010 and binds every presentation of the 13-day
+                   lead.
 
 ## ADR-026 — Methodological finding: EWMA control-chart theory degrades on serially correlated SCADA residuals
 

@@ -219,8 +219,11 @@ Mitigation status:  MITIGATED (2026-08-12). Remote created
                     head — commit 89cb7b3 (the session-7 ruling series,
                     ADR-018…024 + the matched-FPR sweep script), Actions
                     run 31719097400, conclusion Success (author-confirmed).
+                    Further confirmation: commit 4e8315c (ADR-025/026,
+                    LIM-022, EVENT-001 derivation script), Actions run
+                    31726409390, conclusion Success (author-confirmed).
 Source:             manual (author-flagged, 2026-08-12); Actions runs
-                    31623910742, 31719097400.
+                    31623910742, 31719097400, 31726409390.
 
 ## LIM-010 — Icing events 9 days before EVENT-001 onset (known confounder)
 
@@ -241,8 +244,21 @@ Mitigation status:  OPEN — Chapter 5 must distinguish icing thermal
                     response from lubrication degradation when interpreting
                     early-February residual behaviour; recorded here so the
                     distinction is pre-committed, not post-hoc.
+Chapter 5 obligation (author ruling 2026-08-13, on the ADR-025 EVENT-001
+derivation): the selected-point detection (2019-02-11 17:10 UTC) sits
+8.2 days after the icing episode ended. Chapter 5 must address whether
+the residual excursion reflects lubrication degradation or lingering
+icing-related thermal behaviour, and must state plainly if the available
+evidence cannot separate them. The 13-day lead is NOT presented as clean
+early detection without that qualification. Supporting descriptive
+evidence on file: EXP-20260813-002 evaluation/event001_context_stats.json
+and plots/event001_context_*.png (Kelmarsh 1 and fleet residual/EWMA
+series, 2019-01-15 → 2019-03-10 — the fleet-coherence principle from
+docs/evidence/AMBIENT_EXTREME_20190725_WORKED_EXAMPLE.md applied to
+residuals).
 Source:             docs/evidence/KELMARSH_STATUS_VOCABULARY_2016_2021.json
-                    (long_stop_or_warning_events); ADR-017 evidence review.
+                    (long_stop_or_warning_events); ADR-017 evidence review;
+                    ADR-025 outcome.
 
 ## LIM-011 — EWMA in-control false-alarm inflation (EXP-20260812-001)
 
