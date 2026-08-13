@@ -1149,3 +1149,17 @@ Execution:         a separate, labelled ABLATION — explicitly NOT run
 Affected:          M-30 (ablation runs via the standard pipeline),
                    M-28 (comparison table), Chapter 3 (predictor
                    defence), Chapter 5.
+Outcome (2026-08-13/14, WITHOUT arm stored as EXP-20260813-003;
+comparison in its evaluation/nacelle_ablation.json):
+                   SLICE ORDERING HOLDS IN BOTH configurations — XGBoost
+                   beats the baseline on both targets on the ADR-022
+                   headline slice with and without nacelle_temperature.
+                   Removing the channel costs XGBoost accuracy (slice
+                   RMSE bearing 2.147 → 2.371, oil 2.630 → 2.779) but
+                   costs the linear baseline MORE (2.564 → 2.866,
+                   2.917 → 3.162), so the DM margin widens without it
+                   (bearing −33.7 → −35.8, oil −20.4 → −29.3, p ≈ 0).
+                   The RQ1 conclusion does not depend on the least
+                   strictly exogenous predictor; nacelle_temperature
+                   contributes accuracy, not the ordering. Slice
+                   membership identical in both arms (538,045 rows).
