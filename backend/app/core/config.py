@@ -77,6 +77,24 @@ class LoggingConfig(StrictModel):
     json_console: bool = False
 
 
+class ValidationConfig(StrictModel):
+    """Data-validation parameters (PROJECT.md §11).
+
+    The step-change detector parameters were unmarked tunables until the
+    EXP-20260812-001 review: the detector drove the dominant healthy-state
+    exclusion (39.8% of train/validation rows, LIM-014), so its parameters
+    are provisional pending sensitivity analysis, like every other
+    healthy-state lever.
+    """
+
+    step_change_window_samples: int = provisional_field(
+        144, "Rolling-median window for step-change detection (samples)", ge=2
+    )
+    step_change_min_magnitude_c: float = provisional_field(
+        5.0, "Minimum sustained level shift flagged as a step change (°C)", gt=0.0
+    )
+
+
 class HealthyStateConfig(StrictModel):
     """Healthy-state exclusion parameters (PROJECT.md §13).
 
@@ -93,6 +111,9 @@ class HealthyStateConfig(StrictModel):
     )
     minimum_active_power_kw: float = provisional_field(
         50.0, "Operating-state floor on active power (kW)"
+    )
+    step_change_exclusion_days: float = provisional_field(
+        1.0, "Half-window excluded around each detected step change (days)", ge=0.0
     )
 
 
@@ -159,6 +180,7 @@ class AppConfig(StrictModel):
     corresponding modules are implemented (ARCHITECTURE.md §10)."""
 
     logging: LoggingConfig = LoggingConfig()
+    validation: ValidationConfig = ValidationConfig()
     healthy_state: HealthyStateConfig = HealthyStateConfig()
     model: ModelConfig = ModelConfig()
     residual: ResidualConfig = ResidualConfig()

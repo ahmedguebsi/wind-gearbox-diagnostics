@@ -25,6 +25,9 @@ EXPECTED_PROVISIONAL = sorted(
         "healthy_state.fault_pre_exclusion_days",
         "healthy_state.maintenance_post_exclusion_days",
         "healthy_state.minimum_active_power_kw",
+        "healthy_state.step_change_exclusion_days",
+        "validation.step_change_min_magnitude_c",
+        "validation.step_change_window_samples",
     ]
 )
 

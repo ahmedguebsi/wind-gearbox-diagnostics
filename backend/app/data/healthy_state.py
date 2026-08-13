@@ -98,7 +98,6 @@ class HealthyStateBuilder:
         alarm_windows: list[ExclusionWindow] | None = None,
         maintenance_windows: list[ExclusionWindow] | None = None,
         step_changes: list[StepChange] | None = None,
-        step_change_days: float = 1.0,
     ) -> tuple[CanonicalDataset, HealthyStateReport]:
         frame = dataset.frame
         timestamp = self.schema.timestamp_name
@@ -139,7 +138,7 @@ class HealthyStateBuilder:
                     )
                 )
         for step in step_changes or []:
-            half = timedelta(days=step_change_days)
+            half = timedelta(days=self.config.step_change_exclusion_days)
             windows.append(
                 ExclusionWindow(
                     step.turbine,

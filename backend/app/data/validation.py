@@ -20,6 +20,7 @@ from typing import Any, Protocol
 import numpy as np
 import pandas as pd
 
+from app.core.config import ValidationConfig
 from app.data.ingestion import CanonicalDataset
 from app.data.schema import CanonicalSchema, VariableRole
 
@@ -295,9 +296,14 @@ class StepChangeRule:
 
     rule_id = "STEP_CHANGE"
 
-    def __init__(self, window: int = 144, min_magnitude: float = 5.0) -> None:
-        self.window = window
-        self.min_magnitude = min_magnitude
+    def __init__(self, window: int | None = None, min_magnitude: float | None = None) -> None:
+        # Parameter values live in ValidationConfig (provisional, LIM-014);
+        # None resolves to the config defaults so there is a single source.
+        defaults = ValidationConfig()
+        self.window = window if window is not None else defaults.step_change_window_samples
+        self.min_magnitude = (
+            min_magnitude if min_magnitude is not None else defaults.step_change_min_magnitude_c
+        )
         self.detected: list[StepChange] = []
 
     def check(self, dataset: CanonicalDataset, schema: CanonicalSchema) -> list[Finding]:
@@ -365,14 +371,18 @@ def _by_turbine(frame: pd.DataFrame, turbine_column: str) -> list[tuple[str, pd.
     return [(str(name), group) for name, group in frame.groupby(turbine_column, observed=True)]
 
 
-def default_rules() -> list[ValidationRule]:
+def default_rules(validation: ValidationConfig | None = None) -> list[ValidationRule]:
+    validation = validation if validation is not None else ValidationConfig()
     return [
         TimestampRule(),
         MissingValueRule(),
         ConstantColumnRule(),
         RangeRule(),
         ResearchSchemaRule(),
-        StepChangeRule(),
+        StepChangeRule(
+            window=validation.step_change_window_samples,
+            min_magnitude=validation.step_change_min_magnitude_c,
+        ),
     ]
 
 

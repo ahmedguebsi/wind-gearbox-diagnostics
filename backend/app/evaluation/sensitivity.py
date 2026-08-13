@@ -24,16 +24,21 @@ from app.core.limitations import append_limitation
 
 #: Default sweep grids per provisional parameter. The fault-pre-exclusion
 #: grid is the one PROJECT.md §27.3 names (15/30/60); the event-match grid
-#: is ADR-017(d) (7/14/30); the remaining grids bracket each provisional
-#: default and stay configurable per run.
+#: is ADR-017(d) (7/14/30); the step-change grids exist because the detector
+#: drove the dominant healthy-state exclusion in EXP-20260812-001 (LIM-014);
+#: the remaining grids bracket each provisional default and stay
+#: configurable per run.
 DEFAULT_GRIDS: dict[str, tuple[Any, ...]] = {
     "healthy_state.fault_pre_exclusion_days": (15, 30, 60),
     "healthy_state.maintenance_post_exclusion_days": (1, 2, 4),
     "healthy_state.minimum_active_power_kw": (25.0, 50.0, 100.0),
+    "healthy_state.step_change_exclusion_days": (0.5, 1.0, 2.0),
     "detection.ewma_lambda": (0.1, 0.2, 0.3),
     "detection.control_limit_sigma": (2.0, 3.0, 4.0),
     "detection.persistence_min_samples": (2, 3, 6),
     "evaluation.event_match_window_days": (7, 14, 30),
+    "validation.step_change_window_samples": (72, 144, 288),
+    "validation.step_change_min_magnitude_c": (2.5, 5.0, 10.0),
 }
 
 

@@ -47,7 +47,7 @@ from app.data.splitting import (
     SplitSpec,
     split_chronologically,
 )
-from app.data.validation import DatasetReport, validate
+from app.data.validation import DatasetReport, default_rules, validate
 from app.experiments.store import ArtifactStore
 from app.experiments.tracker import (
     DatasetMetadata,
@@ -145,7 +145,7 @@ def run_pipeline(config: AppConfig, inputs: PipelineInputs) -> PipelineResult:
         span_end=span_end,
         supplier_note=inputs.supplier_note,
     )
-    dataset_report = validate(dataset, inputs.schema)
+    dataset_report = validate(dataset, inputs.schema, default_rules(config.validation))
     cleaned, audit = clean(dataset, inputs.schema, list(inputs.cleaning_operations))
 
     # PROJECT.md §14: healthy training period → healthy validation period →
