@@ -76,7 +76,12 @@ def _config(**overrides) -> AppConfig:
 
 
 def _write_fixture_csv(
-    path: Path, rows: int = 240, low_power_tail: int = 0, noisy: bool = False
+    path: Path,
+    rows: int = 240,
+    low_power_tail: int = 0,
+    noisy: bool = False,
+    turbine: str = "T1",
+    phase: int = 0,
 ) -> Path:
     """Synthetic 10-minute SCADA export, one turbine, deterministic values.
 
@@ -93,10 +98,16 @@ def _write_fixture_csv(
         wind = 4.0 + (i % 40) * 0.2
         power = 10.0 if i >= rows - low_power_tail else 200.0 + (i % 40) * 40.0
         ambient = 5.0 + (i % 24) * 0.5
-        wiggle = ((i * 37) % 17) * 0.08 if noisy else 0.0
+        # ``phase`` shifts the perturbation pattern so fixture turbines are
+        # genuinely different machines. Identical turbines would make every
+        # fleet-relative residual exactly zero, which the normalizer then
+        # correctly refuses as a degenerate scale.
+        wiggle = (((i + phase) * 37) % 17) * 0.08 if noisy else 0.0
         oil = 45.0 + (i % 40) * 0.3 + wiggle
         bearing = 55.0 + (i % 40) * 0.25 + wiggle
-        lines.append(f"{stamp:%Y-%m-%d %H:%M:%S},T1,{wind},{power},{ambient},{oil},{bearing}")
+        lines.append(
+            f"{stamp:%Y-%m-%d %H:%M:%S},{turbine},{wind},{power},{ambient},{oil},{bearing}"
+        )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
 
@@ -698,3 +709,78 @@ class TestSelectionCalibrationSeparation:
         stub = _Stub()
         assert adopt_tuned_iteration_count(stub) is None
         assert stub.hyperparameters["n_estimators"] == 300
+
+
+class TestMultipleBaselineWiring:
+    """ADR-032 wiring: three models reach the metrics table intact."""
+
+    def test_all_three_models_are_fitted_and_scored(self, inputs, store):
+        experiment_id, result = run_experiment(_config(), inputs, store)
+        assert set(result.models) == {"thesis", "baseline", "elastic_net"}
+        nbm = store.load_metrics(experiment_id)["nbm"]
+        assert set(nbm) == {"thesis", "baseline", "elastic_net"}
+        for model_key in nbm:
+            assert set(nbm[model_key]["test"]) == set(inputs.feature.targets)
+
+    def test_underscored_model_name_is_not_mis_keyed(self, inputs, store):
+        """The bug this wiring had to fix. Splitting a prediction key on the
+        first underscore resolves 'elastic_net_test' to model 'elastic',
+        partition 'net_test' — producing a plausible-looking metrics table
+        rather than an error. Assert the malformed keys are absent."""
+        experiment_id, _ = run_experiment(_config(), inputs, store)
+        nbm = store.load_metrics(experiment_id)["nbm"]
+        assert "elastic" not in nbm
+        assert "net_test" not in nbm.get("elastic_net", {})
+        assert "test" in nbm["elastic_net"]
+
+    def test_all_models_train_on_identical_rows(self, inputs, store):
+        """ADR-032(d): a size difference would confound the comparison."""
+        _, result = run_experiment(_config(), inputs, store)
+        rows = {k: r.n_training_rows for k, r in result.fit_reports.items()}
+        assert len(set(rows.values())) == 1, rows
+
+    def test_ols_reference_is_mandatory(self, inputs):
+        """Every tuned model's selection score divides by the OLS RMSE, so
+        dropping it from the baseline set must fail loudly."""
+        config = _config(model={"baselines": ["elastic_net"], "tuning": {"enabled": False}})
+        with pytest.raises(ConfigError, match="OLS reference"):
+            run_pipeline(config, inputs)
+
+    def test_predictions_persist_for_every_model(self, inputs, store):
+        experiment_id, _ = run_experiment(_config(), inputs, store)
+        directory = store.experiment_dir(experiment_id) / "predictions"
+        for key in ("thesis_test", "baseline_test", "elastic_net_test"):
+            assert (directory / f"{key}.parquet").is_file()
+
+
+class TestFleetRelativeArm:
+    """ADR-029: off by default; on, it must be recorded, not silent."""
+
+    def test_off_by_default(self, inputs, store):
+        experiment_id, _ = run_experiment(_config(), inputs, store)
+        detection = store.load_metrics(experiment_id)["detection"]
+        assert detection["fleet_relative"] is False
+        assert detection["fleet_adjustment"] == {}
+
+    def test_enabling_it_is_recorded_in_metrics(self, tmp_path, mapping):
+        """A run must never be ambiguous about which residual definition it
+        used — the arm changes what is being detected."""
+        csv = _write_fixture_csv(tmp_path / "fleet_a.csv", turbine="T1", noisy=True, phase=0)
+        csv_b = _write_fixture_csv(tmp_path / "fleet_b.csv", turbine="T2", noisy=True, phase=5)
+        csv_c = _write_fixture_csv(tmp_path / "fleet_c.csv", turbine="T3", noisy=True, phase=11)
+        fleet_inputs = PipelineInputs(
+            schema=SCHEMA,
+            mapping=mapping,
+            source_paths=(csv, csv_b, csv_c),
+            feature=FeatureConfig(
+                predictors=(WIND_SPEED, ACTIVE_POWER, AMBIENT_TEMPERATURE),
+                targets=(GEARBOX_OIL_TEMPERATURE, GEARBOX_BEARING_TEMPERATURE),
+            ),
+            split_spec=SplitSpec(),
+            cleaning_operations=("drop_missing_any_target",),
+        )
+        result = run_pipeline(_config(residual={"fleet_relative": True}), fleet_inputs)
+        detection = result.metrics["detection"]
+        assert detection["fleet_relative"] is True
+        assert "training" in detection["fleet_adjustment"]
+        assert detection["fleet_adjustment"]["training"]["min_peers"] == 2

@@ -21,6 +21,7 @@ reproduction re-runs cannot grow the register.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -87,6 +88,7 @@ from app.residuals.ewma import (
     EwmaDetector,
     InControlReport,
 )
+from app.residuals.fleet import fleet_relative_residuals
 from app.residuals.normalization import make_normalizer, partition_for
 
 _logger = get_logger("experiments.runner")
@@ -276,7 +278,7 @@ def run_pipeline(config: AppConfig, inputs: PipelineInputs) -> PipelineResult:
             "test_is_unfiltered_monitoring": True,
             "seasonal_warnings": len(split.seasonal_coverage.warnings),
         },
-        "nbm": _nbm_metrics(inputs, metrics_partitions, predictions),
+        "nbm": _nbm_metrics(inputs, metrics_partitions, predictions, list(models)),
         "rq1": {
             "headline_period": "monitoring_healthy",
             "period_labels": {
@@ -345,15 +347,28 @@ def _fit_and_predict(
     predictions: dict[str, pd.DataFrame] = {}
 
     if config.model.include_baseline:
-        baseline = create_model(BASELINE_MODEL_NAME)
-        models[BASELINE_KEY] = baseline
-        fit_reports[BASELINE_KEY] = fit_model(
-            baseline, partitions["training"], inputs.feature, inputs.schema, seed=seed
-        )
-        for partition, frame in partitions.items():
-            if partition == "training":
-                continue  # baseline residuals are never thresholded (RQ1 context only)
-            predictions[f"{BASELINE_KEY}_{partition}"] = baseline.predict(frame[predictors])
+        # ADR-032: OLS keeps the historical ``baseline`` key — it is the fixed
+        # zero-hyperparameter reference whose validation RMSE normalises every
+        # tuned model's selection score. Further baselines are keyed by model
+        # name. Baseline residuals are never thresholded (RQ1 context only).
+        for baseline_name in config.model.baselines:
+            key = BASELINE_KEY if baseline_name == BASELINE_MODEL_NAME else baseline_name
+            baseline = create_model(baseline_name)
+            models[key] = baseline
+            fit_reports[key] = fit_model(
+                baseline, partitions["training"], inputs.feature, inputs.schema, seed=seed
+            )
+            for partition, frame in partitions.items():
+                if partition == "training":
+                    continue
+                predictions[f"{key}_{partition}"] = baseline.predict(frame[predictors])
+        if BASELINE_KEY not in models:
+            raise ConfigError(
+                "The OLS reference must be among model.baselines: it is the "
+                "zero-hyperparameter denominator every tuned model's selection "
+                "score divides by (ADR-021/ADR-032)",
+                baselines=list(config.model.baselines),
+            )
 
     thesis_hyperparameters = dict(config.model.hyperparameters)
     if tuning.enabled:
@@ -414,6 +429,33 @@ def _fit_and_predict(
         fit_reports[THESIS_KEY] = fit_model(
             thesis, partitions["training"], inputs.feature, inputs.schema, seed=seed
         )
+
+        # ADR-032(a): the regularised baseline is tuned on the SAME inner
+        # block, against the SAME OLS denominator, and refitted on full TRAIN.
+        # An untuned regularised model would be a strawman in the opposite
+        # direction to an unregularised one.
+        elastic = models.get("elastic_net")
+        elastic_tuning = config.model.elastic_net_tuning
+        if elastic is not None and elastic_tuning.enabled:
+            fit_reports["elastic_net"] = tune_model(
+                elastic,
+                inner_fit,
+                inner_score,
+                inputs.feature,
+                inputs.schema,
+                candidates=elastic_tuning.candidates(),
+                seed=seed,
+                selection=tuning.selection.value,
+                baseline_validation_rmse=baseline_rmse,
+                early_stopping_rounds=None,
+            )
+            fit_reports["elastic_net"] = fit_model(
+                elastic, partitions["training"], inputs.feature, inputs.schema, seed=seed
+            )
+            for partition, frame in partitions.items():
+                if partition == "training":
+                    continue
+                predictions[f"elastic_net_{partition}"] = elastic.predict(frame[predictors])
         assert fit_reports[THESIS_KEY].tuning_configurations_evaluated == len(
             tuning_report.tuning_trials
         )
@@ -441,6 +483,15 @@ def _residual_stages(
         for partition, frame in partitions.items()
     }
 
+    fleet_reports: dict[str, Any] = {}
+    if config.residual.fleet_relative:
+        # ADR-029 ABLATION ARM. Applied to raw residuals in every partition
+        # before any statistic is fitted, so the normalizer and control limits
+        # describe the same quantity the detector will read.
+        for partition in list(raw):
+            raw[partition], fleet_report = fleet_relative_residuals(raw[partition])
+            fleet_reports[partition] = fleet_report.as_dict()
+
     source = partition_for(config.residual.threshold_stats_source)
     source_partition = config.residual.threshold_stats_source.value
     normalizer = make_normalizer(config.residual.normalization)
@@ -460,6 +511,8 @@ def _residual_stages(
     _, test_detections = detector.detect(normalized["test"])
 
     detection_metrics: dict[str, Any] = {
+        "fleet_relative": config.residual.fleet_relative,
+        "fleet_adjustment": fleet_reports,
         "in_control": in_control.as_dict(),
         "test_streams": len(test_detections),
         "test_points": sum(len(d.states) for d in test_detections),
@@ -564,19 +617,29 @@ def _nbm_metrics(
     inputs: PipelineInputs,
     partitions: dict[str, pd.DataFrame],
     predictions: dict[str, pd.DataFrame],
+    model_keys: Sequence[str],
 ) -> dict[str, Any]:
-    """RMSE/MAE/R²/bias per model, partition, and target (M-18; no MAPE)."""
+    """RMSE/MAE/R²/bias per model, partition, and target (M-18; no MAPE).
+
+    Model and partition are iterated EXPLICITLY rather than recovered by
+    splitting the prediction key. Parsing on the first underscore silently
+    mis-keys any model whose name contains one — ``elastic_net_test`` would
+    resolve to model ``elastic``, partition ``net_test`` — and the error would
+    surface as a plausible-looking metrics table rather than a failure.
+    """
     targets = list(inputs.feature.targets)
     table: dict[str, Any] = {}
-    for key, predicted in predictions.items():
-        model_key, _, partition = key.partition("_")
-        if partition == "training":
-            continue  # headline accuracy is out-of-sample only
-        actual = partitions[partition][targets]
-        per_target = compute_per_target(actual, predicted)
-        table.setdefault(model_key, {})[partition] = {
-            target: metric_set.as_dict() for target, metric_set in per_target.items()
-        }
+    for model_key in model_keys:
+        for partition in partitions:
+            if partition == "training":
+                continue  # headline accuracy is out-of-sample only
+            key = f"{model_key}_{partition}"
+            if key not in predictions:
+                continue
+            per_target = compute_per_target(partitions[partition][targets], predictions[key])
+            table.setdefault(model_key, {})[partition] = {
+                target: metric_set.as_dict() for target, metric_set in per_target.items()
+            }
     return table
 
 

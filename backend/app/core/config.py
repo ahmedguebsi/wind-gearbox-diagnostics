@@ -202,6 +202,28 @@ class TuningConfig(StrictModel):
         )
 
 
+class ElasticNetTuningConfig(StrictModel):
+    """ADR-032(a) pre-registered grid for the second BASELINE.
+
+    Nine candidates spanning regularisation strength and the ridge-to-lasso
+    axis. Deliberately smaller than the thesis model's 12 so the reference
+    cannot dominate the multiple-comparison budget it exists to contextualise.
+    The grid lives in config, so every experiment's resolved configuration
+    carries the exact search it ran.
+    """
+
+    enabled: bool = True
+    alpha_grid: tuple[float, ...] = Field(default=(0.01, 0.1, 1.0), min_length=1)
+    l1_ratio_grid: tuple[float, ...] = Field(default=(0.15, 0.5, 0.85), min_length=1)
+
+    def candidates(self) -> tuple[dict[str, Any], ...]:
+        return tuple(
+            {"alpha": alpha, "l1_ratio": ratio}
+            for alpha in self.alpha_grid
+            for ratio in self.l1_ratio_grid
+        )
+
+
 class ModelConfig(StrictModel):
     """NBM configuration (PROJECT.md §18).
 
@@ -218,6 +240,11 @@ class ModelConfig(StrictModel):
     #: Seed for every stochastic model component; recorded per PROJECT.md §15.
     seed: int = 42
     tuning: TuningConfig = TuningConfig()
+    #: ADR-032: OLS is the fixed zero-hyperparameter reference and normalises
+    #: every tuned model's selection score; Elastic Net is the regularised
+    #: comparator that separates non-linearity from regularisation.
+    baselines: tuple[str, ...] = ("linear_regression", "elastic_net")
+    elastic_net_tuning: ElasticNetTuningConfig = ElasticNetTuningConfig()
 
 
 class ResidualConfig(StrictModel):
@@ -225,6 +252,14 @@ class ResidualConfig(StrictModel):
 
     normalization: NormalizationMethod = NormalizationMethod.MAD
     threshold_stats_source: ThresholdStatsSource = ThresholdStatsSource.TRAINING
+    #: ADR-029 ABLATION ARM, default off. Subtracts the leave-one-out fleet
+    #: median before normalization, removing farm-common behaviour (weather,
+    #: icing, grid events) and leaving turbine-idiosyncratic behaviour. Uses
+    #: contemporaneous cross-turbine information: valid for single-machine
+    #: faults, INVALID for farm-wide fault modes. Never the headline default —
+    #: adopting it after observing the LIM-023 case study fail would be
+    #: post-hoc pipeline selection.
+    fleet_relative: bool = False
 
 
 class DetectionConfig(StrictModel):
