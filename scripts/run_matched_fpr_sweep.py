@@ -112,6 +112,13 @@ BASE_GRID = tuple(round(2.0 + 0.25 * i, 2) for i in range(17)) + tuple(
 )
 EXTENSION_GRID = tuple(float(m) for m in range(13, 21))
 PERSISTENCE = 3  # ADR-017(b): the isolated/sustained boundary
+#: ADR-031: the pre-registered boundary FIRST, then the literature-anchored
+#: values. Nogueira et al. (Sensors 25(14):4499, 2025) require 20 consecutive
+#: samples (~3.3 h); Gueck et al. (CARE, arXiv:2404.10320) require 72 (~12 h)
+#: before declaring a false-alarm event. At 10-minute sampling our 3 samples
+#: is 30 minutes - an order of magnitude below published practice, and it
+#: defines the boundary that decides the ADR-016 verdict.
+BOUNDARY_GRID = (PERSISTENCE, 2, 5, 10, 12, 20)
 INTERPRETABILITY_TOLERANCE = 0.05
 SAMPLE_MINUTES = 10.0
 MINUTES_PER_YEAR = 365.25 * 24 * 60
@@ -378,7 +385,7 @@ def main() -> int:
                     b,
                 )
                 | {"pre_registered": b == PERSISTENCE}
-                for b in (PERSISTENCE, 2, 5, 10)
+                for b in BOUNDARY_GRID
             ]
             row.update(
                 {
@@ -398,9 +405,15 @@ def main() -> int:
                     },
                     "exploratory_boundary_sensitivity": {
                         "label": (
-                            "POST-HOC EXPLORATORY (author-permitted 2026-08-13): "
-                            "does not replace the pre-registered answer; the "
-                            "pre-registered boundary (3 samples) is listed first"
+                            "POST-HOC EXPLORATORY (author-permitted 2026-08-13; "
+                            "extended to 12 and 20 samples under ADR-031): does "
+                            "not replace the pre-registered answer; the "
+                            "pre-registered boundary (3 samples) is listed first. "
+                            "20 samples is the Nogueira et al. (2025) persistence "
+                            "rule; 12 approximates the CARE 72-sample false-alarm "
+                            "criticality threshold scaled to this sweep's episode "
+                            "definition. Our 3 samples is 30 minutes, an order of "
+                            "magnitude below published practice"
                         ),
                         "verdicts": exploratory,
                     },
