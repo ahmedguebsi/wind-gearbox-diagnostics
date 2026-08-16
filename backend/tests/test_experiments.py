@@ -518,3 +518,56 @@ class TestLimitationsAppend:
 
     def test_no_path_supplied_leaves_register_untouched(self):
         _record_inflation("EXP-20260812-001", self._report(ratio=10.0), None)
+
+
+class TestResidualDiagnosticsWiring:
+    """M-28 companion: descriptive residual diagnostics reach the artifacts.
+
+    Read-only by design — they must not be able to change a metric or abort a
+    run, and they must stay inside the reproduction diff.
+    """
+
+    def test_summary_lands_in_metrics_and_detail_in_a_report(self, inputs, store):
+        experiment_id, result = run_experiment(_config(), inputs, store)
+        summary = store.load_metrics(experiment_id)["residual_diagnostics"]
+        for partition in ("training", "validation", "test"):
+            assert partition in summary
+            assert "max_abs_cross_target_pearson" in summary[partition]
+            assert "max_centre_spread_in_pooled_scales" in summary[partition]
+        report = store.experiment_dir(experiment_id) / "evaluation" / "residual_diagnostics.json"
+        assert report.is_file()
+        payload = json.loads(report.read_text(encoding="utf-8"))
+        assert "cross_target_correlation" in payload["training"]
+        assert "per_turbine_residual_stats" in payload["training"]
+        assert result.residual_diagnostics == payload
+
+    def test_diagnostics_are_deterministic_and_reproduce_exactly(self, inputs, store):
+        """They enter metrics.json, so a non-deterministic diagnostic would
+        break the M-31 EXACT MATCH gate. Pin that."""
+        experiment_id, _ = run_experiment(_config(), inputs, store)
+        report = reproduce(experiment_id, store)
+        assert report.status is ReproductionStatus.EXACT_MATCH
+
+    def test_a_refused_estimate_records_its_reason_rather_than_aborting(self, tmp_path, mapping):
+        """A diagnostic must never be able to fail a run. Too few rows to
+        estimate a correlation is a recorded refusal, not an exception."""
+        csv = _write_fixture_csv(tmp_path / "tiny.csv", rows=60)
+        tiny = PipelineInputs(
+            schema=SCHEMA,
+            mapping=mapping,
+            source_paths=(csv,),
+            feature=FeatureConfig(
+                predictors=(WIND_SPEED, ACTIVE_POWER, AMBIENT_TEMPERATURE),
+                targets=(GEARBOX_OIL_TEMPERATURE, GEARBOX_BEARING_TEMPERATURE),
+            ),
+            split_spec=SplitSpec(),
+            cleaning_operations=("drop_missing_any_target",),
+        )
+        result = run_pipeline(_config(), tiny)
+        # 60 rows -> validation/test hold 9 each, below the estimator minimum.
+        refused = result.residual_diagnostics["validation"]["cross_target_correlation"]
+        assert "not_computed" in refused
+        assert (
+            result.metrics["residual_diagnostics"]["validation"]["max_abs_cross_target_pearson"]
+            is None
+        )

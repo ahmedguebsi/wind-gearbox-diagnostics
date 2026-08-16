@@ -55,6 +55,10 @@ from app.data.splitting import (
     split_chronologically,
 )
 from app.data.validation import DatasetReport, default_rules, validate
+from app.evaluation.residual_diagnostics import (
+    cross_target_correlation,
+    per_turbine_residual_stats,
+)
 from app.experiments.store import ArtifactStore
 from app.experiments.tracker import (
     DatasetMetadata,
@@ -129,6 +133,8 @@ class PipelineResult:
     normalizer_stats: dict[str, Any]
     in_control: InControlReport | None
     metrics: dict[str, Any]
+    #: Descriptive residual diagnostics per partition (read-only).
+    residual_diagnostics: dict[str, Any] = field(default_factory=dict)
 
 
 def _cleaning_metrics(
@@ -219,6 +225,7 @@ def run_pipeline(config: AppConfig, inputs: PipelineInputs) -> PipelineResult:
     residual_frames, normalizer_stats, in_control, detection_metrics = _residual_stages(
         config, inputs, partitions, predictions
     )
+    residual_diagnostics = _residual_diagnostics(residual_frames)
 
     # ADR-022: the RQ1 headline is the healthy-filtered monitoring slice —
     # a METRICS path only. Detection, residuals, EWMA, and all RQ2/RQ3
@@ -281,6 +288,7 @@ def run_pipeline(config: AppConfig, inputs: PipelineInputs) -> PipelineResult:
             "monitoring_healthy_exclusions": slice_report.exclusion_counts,
         },
         "detection": detection_metrics,
+        "residual_diagnostics": _residual_diagnostics_summary(residual_diagnostics),
     }
     return PipelineResult(
         cleaned=cleaned,
@@ -296,6 +304,7 @@ def run_pipeline(config: AppConfig, inputs: PipelineInputs) -> PipelineResult:
         normalizer_stats=normalizer_stats,
         in_control=in_control,
         metrics=metrics,
+        residual_diagnostics=residual_diagnostics,
     )
 
 
@@ -425,6 +434,63 @@ def _residual_stages(
     return normalized, dict(normalizer.fitted_stats()), in_control, detection_metrics
 
 
+def _residual_diagnostics(residuals: dict[str, ResidualFrame]) -> dict[str, Any]:
+    """Descriptive residual diagnostics per partition (M-28 companion).
+
+    Read-only: nothing here feeds a model, a threshold, or a reported metric.
+    Two assumptions the pipeline otherwise leaves unmeasured — that the two
+    thermal targets carry non-redundant residual evidence (the coordinated-
+    detection premise), and that pooling residual statistics across turbines
+    is defensible (M-19b fits per target, pooled across machines).
+
+    A diagnostic must not be able to abort a run, so a partition that cannot
+    support an estimate records the refusal reason instead of raising.
+    """
+    output: dict[str, Any] = {}
+    for partition, frame in residuals.items():
+        entry: dict[str, Any] = {}
+        try:
+            entry["cross_target_correlation"] = cross_target_correlation(
+                frame, partition=partition
+            ).as_dict()
+        except ConfigError as exc:
+            entry["cross_target_correlation"] = {"not_computed": exc.message}
+        try:
+            entry["per_turbine_residual_stats"] = per_turbine_residual_stats(
+                frame, partition=partition
+            ).as_dict()
+        except ConfigError as exc:
+            entry["per_turbine_residual_stats"] = {"not_computed": exc.message}
+        output[partition] = entry
+    return output
+
+
+def _residual_diagnostics_summary(diagnostics: dict[str, Any]) -> dict[str, Any]:
+    """The two decisive numbers per partition, for metrics.json.
+
+    Full detail lands in evaluation/residual_diagnostics.json; these are the
+    figures that decide whether coordination adds evidence and whether pooled
+    normalization is defensible, so they belong where the diff will see them.
+    """
+    summary: dict[str, Any] = {}
+    for partition, entry in diagnostics.items():
+        correlation = entry.get("cross_target_correlation", {})
+        pooling = entry.get("per_turbine_residual_stats", {})
+        pairs = correlation.get("pairs", [])
+        pooled = pooling.get("pooled", [])
+        summary[partition] = {
+            "max_abs_cross_target_pearson": (
+                round(max(abs(float(p["pearson"])) for p in pairs), 6) if pairs else None
+            ),
+            "max_centre_spread_in_pooled_scales": (
+                round(max(float(p["centre_spread_in_pooled_scales"]) for p in pooled), 6)
+                if pooled
+                else None
+            ),
+        }
+    return summary
+
+
 def _monitoring_healthy_slice(
     config: AppConfig,
     inputs: PipelineInputs,
@@ -501,6 +567,7 @@ def run_experiment(
         store.write_report(experiment_id, "healthy_state_report", result.healthy_report.as_dict())
         store.write_report(experiment_id, "split", _split_dict(result.split))
         store.write_report(experiment_id, "normalizer_stats", result.normalizer_stats)
+        store.write_report(experiment_id, "residual_diagnostics", result.residual_diagnostics)
         for key, model in result.models.items():
             model.save(directory / "model" / key)
         for key, frame in result.predictions.items():
