@@ -51,7 +51,10 @@ from app.evaluation.bootstrap import (  # noqa: E402
     BlockedBootstrap,
     block_length_from_autocorrelation,
 )
-from app.evaluation.dm_test import diebold_mariano  # noqa: E402
+from app.evaluation.dm_test import (  # noqa: E402
+    diebold_mariano,
+    diebold_mariano_by_turbine,
+)
 from app.evaluation.event_eval import evaluate_events  # noqa: E402
 from app.evaluation.events import EVENT_001, StatusValue, parse_status_csv  # noqa: E402
 from app.experiments.runner import PipelineInputs, run_experiment  # noqa: E402
@@ -275,29 +278,51 @@ def three_period_rq1(result, schema, targets):
         "monitoring_healthy": cleaned.loc[result.predictions["thesis_monitoring_healthy"].index],
         "test": cleaned.loc[split.test],
     }
+    turbine_column = schema.turbine_id_name
     rq1: dict[str, dict] = {}
     dm: dict[str, dict] = {}
     for period, frame in period_frames.items():
         frame = frame.sort_values(schema.timestamp_name)
-        losses: dict[str, np.ndarray] = {}
-        for model_key in ("thesis", "baseline"):
-            predictions = result.predictions[f"{model_key}_{period}"].loc[frame.index]
-            for target in targets:
-                actual = frame[target].to_numpy(dtype=float)
-                predicted = predictions[target].to_numpy(dtype=float)
-                keep = ~np.isnan(actual) & ~np.isnan(predicted)
-                residual = actual[keep] - predicted[keep]
+        predicted_by_model = {
+            model_key: result.predictions[f"{model_key}_{period}"].loc[frame.index]
+            for model_key in ("thesis", "baseline")
+        }
+        for target in targets:
+            actual = frame[target].to_numpy(dtype=float)
+            # ONE mask across both models. Masking per model and then
+            # truncating to the shorter series would pair mismatched
+            # observations whenever the two models' missing patterns differ.
+            keep = ~np.isnan(actual)
+            for predictions in predicted_by_model.values():
+                keep &= ~np.isnan(predictions[target].to_numpy(dtype=float))
+
+            losses: dict[str, np.ndarray] = {}
+            for model_key, predictions in predicted_by_model.items():
+                residual = actual[keep] - predictions[target].to_numpy(dtype=float)[keep]
                 rq1.setdefault(period, {}).setdefault(model_key, {})[target] = metric_cis(
                     residual, actual[keep]
                 )
-                losses[f"{model_key}_{target}"] = residual**2
-        for target in targets:
-            loss_thesis = losses[f"thesis_{target}"]
-            loss_baseline = losses[f"baseline_{target}"]
-            n = min(len(loss_thesis), len(loss_baseline))
-            dm.setdefault(period, {})[target] = diebold_mariano(
-                loss_thesis[:n], loss_baseline[:n]
-            ).as_dict()
+                losses[model_key] = residual**2
+
+            # ADR/P-3: the pooled series interleaves six turbines at every
+            # 10-minute stamp, so a single test treats contemporaneous
+            # cross-turbine observations as sequential ones and the default
+            # lag rule covers a fraction of the real dependence. Both are
+            # reported: the pooled figure is what was previously published,
+            # so the change is quantified rather than silently substituted.
+            turbines = frame[turbine_column].astype(str).to_numpy()[keep]
+            dm.setdefault(period, {})[target] = {
+                "pooled_interleaved": diebold_mariano(
+                    losses["thesis"], losses["baseline"]
+                ).as_dict(),
+                "per_turbine": diebold_mariano_by_turbine(
+                    losses["thesis"], losses["baseline"], turbines
+                ).as_dict(),
+                "note": (
+                    "per_turbine is the defensible figure; pooled_interleaved "
+                    "is retained only so the correction can be measured."
+                ),
+            }
     return rq1, dm, period_frames
 
 
