@@ -36,6 +36,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any, Protocol
 
 import numpy as np
@@ -148,6 +149,9 @@ class OperatingPoint:
     alarm_fraction: float
     n_alarm_events: int
     n_points: int
+    #: Which denominator produced the rate (ADR-028). Recorded per point so a
+    #: curve cannot be compared against one measured on a different basis.
+    observation_basis: str = "row_time"
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -156,6 +160,7 @@ class OperatingPoint:
             "alarm_fraction": self.alarm_fraction,
             "n_alarm_events": self.n_alarm_events,
             "n_points": self.n_points,
+            "observation_basis": self.observation_basis,
         }
 
 
@@ -185,19 +190,53 @@ def _rising_edges(flags: pd.Series) -> int:
     return int((values & ~previous).sum())
 
 
-def _turbine_years(flag_map: dict[str, pd.Series]) -> float:
+class ObservationBasis(StrEnum):
+    """How observation time — the false-alarm rate denominator — is measured.
+
+    ROW_TIME counts only observed samples: ``n_rows x median_interval``. It is
+    the correct basis whenever the stream is gap-filled, which every healthy
+    partition is (healthy-state exclusion removes alarm periods and every row
+    below the power floor).
+
+    CALENDAR_SPAN measures first timestamp to last, so excluded time still
+    counts in the denominator and the rate is understated by roughly the
+    reciprocal of the retention fraction. Retained only so the pre-ADR-028
+    behaviour stays reproducible for comparison; it must never be mixed with
+    ROW_TIME inside one comparison (docs/METHODOLOGY_REVIEW.md, ADR-028).
+    """
+
+    ROW_TIME = "row_time"
+    CALENDAR_SPAN = "calendar_span"
+
+
+def turbine_years(
+    flag_map: dict[str, pd.Series],
+    basis: ObservationBasis = ObservationBasis.ROW_TIME,
+) -> float:
+    """Observation time in turbine-years under the declared basis."""
     total = pd.Timedelta(0)
     for flags in flag_map.values():
         stamps = pd.Series(flags.index)
         if len(stamps) < 2:
             raise ConfigError("Cannot measure observation span from fewer than 2 points")
-        interval = stamps.diff().dropna().median()
-        total += (stamps.iloc[-1] - stamps.iloc[0]) + interval
+        interval = pd.Timedelta(stamps.diff().dropna().median())
+        if basis is ObservationBasis.ROW_TIME:
+            total += interval * len(stamps)
+        else:
+            total += pd.Timedelta(stamps.iloc[-1] - stamps.iloc[0]) + interval
     return float(total / pd.Timedelta(days=DAYS_PER_YEAR))
 
 
-def sweep(pipeline: DetectionPipeline, grid: Sequence[float]) -> OperatingCurve:
-    """Sweep the control-limit multiplier and measure false-alarm behaviour."""
+def sweep(
+    pipeline: DetectionPipeline,
+    grid: Sequence[float],
+    basis: ObservationBasis = ObservationBasis.ROW_TIME,
+) -> OperatingCurve:
+    """Sweep the control-limit multiplier and measure false-alarm behaviour.
+
+    ``basis`` fixes the rate denominator and is recorded on every point, so a
+    curve cannot be silently compared against one measured differently.
+    """
     if not grid:
         raise ConfigError("Threshold grid is empty")
     points: list[OperatingPoint] = []
@@ -206,7 +245,7 @@ def sweep(pipeline: DetectionPipeline, grid: Sequence[float]) -> OperatingCurve:
         n_events = sum(_rising_edges(flags) for flags in flag_map.values())
         n_points = sum(len(flags) for flags in flag_map.values())
         n_alarmed = sum(int(flags.sum()) for flags in flag_map.values())
-        years = _turbine_years(flag_map)
+        years = turbine_years(flag_map, basis)
         points.append(
             OperatingPoint(
                 multiplier=float(multiplier),
@@ -214,6 +253,7 @@ def sweep(pipeline: DetectionPipeline, grid: Sequence[float]) -> OperatingCurve:
                 alarm_fraction=n_alarmed / n_points if n_points else 0.0,
                 n_alarm_events=n_events,
                 n_points=n_points,
+                observation_basis=basis.value,
             )
         )
     return OperatingCurve(pipeline=pipeline.name, points=tuple(points))

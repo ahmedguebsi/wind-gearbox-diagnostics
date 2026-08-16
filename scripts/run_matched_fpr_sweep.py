@@ -88,10 +88,10 @@ from app.detection.matched_fpr import (  # noqa: E402
     OperatingCurve,
     OperatingPoint,
     SingleSignalPipeline,
-    _turbine_years,
     compare_at,
     matched_multiplier,
     sweep,
+    turbine_years,
 )
 from app.residuals.engine import ResidualFrame  # noqa: E402
 from app.residuals.ewma import ControlLimitFormulation, ControlLimitSpec, EwmaDetector  # noqa: E402
@@ -129,7 +129,10 @@ def episode_lengths(flags: pd.Series) -> list[int]:
 
 def pipeline_lengths(pipeline: DetectionPipeline, multiplier: float) -> tuple[list[int], float]:
     flag_map = pipeline.alarm_flags(multiplier)
-    years = _turbine_years(flag_map)
+    # ADR-028: row-time, the same basis slice_rate uses. Before this change the
+    # validation curves used calendar span while the slice check used row-time,
+    # so the two arms of the headline comparison were not commensurable.
+    years = turbine_years(flag_map)
     lengths: list[int] = []
     for flags in flag_map.values():
         lengths.extend(episode_lengths(flags))

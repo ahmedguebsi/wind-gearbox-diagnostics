@@ -22,12 +22,14 @@ from app.detection.coordinated import CoordinatedAnalyzer
 from app.detection.matched_fpr import (
     ComparisonReport,
     CoordinatedPipeline,
+    ObservationBasis,
     OperatingCurve,
     OperatingPoint,
     SingleSignalPipeline,
     compare_at,
     matched_multiplier,
     sweep,
+    turbine_years,
 )
 from app.detection.single import SingleSignalDetector, states_at_multiplier
 from app.residuals.engine import (
@@ -324,3 +326,78 @@ class TestMatchedFpr:
         pipeline = SingleSignalPipeline("s", [self._noise_series(OIL, 8)], OIL)
         with pytest.raises(ConfigError):
             sweep(pipeline, [])
+
+
+class TestObservationBasis:
+    """ADR-028: the false-alarm rate denominator.
+
+    Before this change the validation operating curves divided alarm episodes
+    by CALENDAR SPAN while the sweep script's monitoring-slice check divided by
+    ROW TIME. On a gap-filled stream those are different quantities, so the two
+    arms of the headline comparison were not commensurable. Every fixture in
+    this file uses a contiguous grid, under which the two bases coincide --
+    which is exactly why the suite could not surface the defect. These tests
+    use a deliberately gapped index.
+    """
+
+    @staticmethod
+    def _gapped_flags() -> dict[str, pd.Series]:
+        """100 ten-minute samples spanning ten days: 90% of the calendar
+        window is missing, as it is after healthy-state exclusion."""
+        head = pd.date_range("2020-01-01", periods=50, freq="10min", tz="UTC")
+        tail = pd.date_range("2020-01-11", periods=50, freq="10min", tz="UTC")
+        index = head.append(tail)
+        return {"T1": pd.Series(np.zeros(len(index), dtype=bool), index=index)}
+
+    def test_the_two_bases_differ_on_a_gapped_stream(self):
+        flags = self._gapped_flags()
+        row_time = turbine_years(flags, ObservationBasis.ROW_TIME)
+        span = turbine_years(flags, ObservationBasis.CALENDAR_SPAN)
+        # Row time counts 100 samples of 10 minutes; span counts ten days.
+        assert row_time == pytest.approx(100 * 10 / (365.25 * 24 * 60), rel=1e-6)
+        assert span > row_time * 10
+
+    def test_bases_agree_on_a_contiguous_stream(self):
+        index = pd.date_range("2020-01-01", periods=500, freq="10min", tz="UTC")
+        flags = {"T1": pd.Series(np.zeros(500, dtype=bool), index=index)}
+        assert turbine_years(flags, ObservationBasis.ROW_TIME) == pytest.approx(
+            turbine_years(flags, ObservationBasis.CALENDAR_SPAN), rel=1e-9
+        )
+
+    def test_row_time_is_the_default(self):
+        flags = self._gapped_flags()
+        assert turbine_years(flags) == turbine_years(flags, ObservationBasis.ROW_TIME)
+
+    def test_calendar_span_understates_the_rate(self):
+        """The direction that matters: the discarded basis reports fewer false
+        alarms per turbine-year for the same alarms."""
+        rng = np.random.default_rng(20)
+        values = rng.standard_normal(200) * 0.5
+        head = pd.date_range("2020-01-01", periods=100, freq="10min", tz="UTC")
+        tail = pd.date_range("2020-02-01", periods=100, freq="10min", tz="UTC")
+        series = EwmaSeries(
+            turbine="T1",
+            target=OIL,
+            timestamps=pd.Series(head.append(tail)),
+            values=pd.Series(values),
+            upper=pd.Series(np.full(200, 1.0)),
+            lower=pd.Series(np.full(200, -1.0)),
+            lam=0.2,
+            spec=ControlLimitSpec(sigma_multiplier=3.0),
+        )
+        pipeline = SingleSignalPipeline("single", [series], OIL)
+        row = sweep(pipeline, [1.0], ObservationBasis.ROW_TIME).points[0]
+        span = sweep(pipeline, [1.0], ObservationBasis.CALENDAR_SPAN).points[0]
+        assert row.n_alarm_events == span.n_alarm_events  # same alarms
+        assert span.false_alarms_per_turbine_year < row.false_alarms_per_turbine_year
+
+    def test_basis_is_recorded_on_every_point(self):
+        pipeline = SingleSignalPipeline("single", [self._noise(OIL)], OIL)
+        curve = sweep(pipeline, [1.0, 2.0], ObservationBasis.CALENDAR_SPAN)
+        assert {p.observation_basis for p in curve.points} == {"calendar_span"}
+        assert OperatingCurve.from_dict(curve.as_dict()) == curve
+
+    @staticmethod
+    def _noise(target: str) -> EwmaSeries:
+        rng = np.random.default_rng(21)
+        return _ewma_series("T1", target, rng.standard_normal(500) * 0.5, limit=1.0)
