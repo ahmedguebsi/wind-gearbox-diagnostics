@@ -1231,3 +1231,25 @@ Supersedes:        ADR-002's "exactly two models" clause only. ADR-003 stands:
                    LightGBM remains omitted, since the question Elastic Net
                    answers — is the advantage non-linearity or regularisation
                    — is not one a second boosted-tree model would address.
+Deviation noted (added 2026-08-16 on first reading of the governing spec):
+                   PROJECT.md §18 as written states "The model set is exactly
+                   two." This ruling makes it three (one THESIS, two
+                   BASELINE). Recorded here rather than resolved silently,
+                   per the PROJECT.md preamble: where this specification and
+                   the methodology conflict, the conflict must be REPORTED,
+                   never silently resolved. §18 is the author's to amend.
+                   Two mitigating observations:
+                   (a) §18 has drifted before and is already known stale —
+                       ADR-002 superseded its earlier three-model list
+                       (Random Forest plus a literature-anchored baseline),
+                       and PROJECT.md §35 PHASE 13 still carries that
+                       superseded wording.
+                   (b) §19 already anticipates more than one baseline: it
+                       specifies Diebold–Mariano comparisons of "XGBoost vs.
+                       EACH baseline, per target". The metrics section and
+                       the models section are not consistent with each other
+                       as written; this ruling follows §19.
+                   No LOCKED constraint is affected. LOCKED-01 fixes only
+                   that XGBoost is THE thesis model and others are
+                   comparators, which this ruling preserves — the registry
+                   meta-test still asserts exactly one THESIS registrant.

@@ -27,6 +27,13 @@ EXPECTED_PROVISIONAL = sorted(
         "healthy_state.maintenance_post_exclusion_days",
         "healthy_state.minimum_active_power_kw",
         "healthy_state.step_change_exclusion_days",
+        # PROJECT.md §27.3 names the normalization method among the
+        # parameters the sensitivity phase must vary; §22 names the
+        # threshold-statistics source as an OPEN ADR whose closure
+        # evidence is a comparison under both branches. Neither was
+        # marked, so neither could be swept (added 2026-08-16).
+        "residual.normalization",
+        "residual.threshold_stats_source",
         "validation.step_change_min_magnitude_c",
         "validation.step_change_window_samples",
     ]
@@ -122,7 +129,11 @@ class TestDefaultsMaterialization:
 
 class TestProvisionalMarkers:
     def test_every_spec_named_provisional_parameter_is_marked(self):
-        """PROJECT.md §13 and §23 provisional values all carry the marker."""
+        """PROJECT.md §13, §22, §23 and §27.3 provisional values all carry
+        the marker. This list is the DECLARED UNIVERSE the grid-coverage
+        guard checks against; a tunable outside it is invisible to the
+        sensitivity phase, which is how the step-change parameters once
+        drove 39.8% of healthy-state attrition unswept (LIM-015)."""
         assert sorted(iter_provisional_parameters()) == EXPECTED_PROVISIONAL
 
     def test_markers_preserved_through_resolution(self):

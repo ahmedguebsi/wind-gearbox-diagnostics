@@ -250,8 +250,20 @@ class ModelConfig(StrictModel):
 class ResidualConfig(StrictModel):
     """Residual normalization configuration (PROJECT.md §22)."""
 
-    normalization: NormalizationMethod = NormalizationMethod.MAD
-    threshold_stats_source: ThresholdStatsSource = ThresholdStatsSource.TRAINING
+    #: PROJECT.md §27.3 names the normalization method among the parameters
+    #: the sensitivity phase MUST vary ("sigma / MAD / percentile"). It was not
+    #: provisional-marked, and the grid-coverage guard refuses grids naming
+    #: non-provisional parameters — so the mandated sweep could not be run.
+    normalization: NormalizationMethod = provisional_field(
+        NormalizationMethod.MAD, "Residual normalization family (PROJECT.md §22, §27.3)"
+    )
+    #: The open ADR-001 branch (PROJECT.md §22): training block as specified in
+    #: v1.0, or validation block per the panel-review recommendation against
+    #: in-sample optimism. Marked provisional so the comparison §22 names as
+    #: its closure evidence can actually be produced.
+    threshold_stats_source: ThresholdStatsSource = provisional_field(
+        ThresholdStatsSource.TRAINING, "Healthy partition supplying threshold statistics (ADR-001)"
+    )
     #: ADR-029 ABLATION ARM, default off. Subtracts the leave-one-out fleet
     #: median before normalization, removing farm-common behaviour (weather,
     #: icing, grid events) and leaving turbine-idiosyncratic behaviour. Uses

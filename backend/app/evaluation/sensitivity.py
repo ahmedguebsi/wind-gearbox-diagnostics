@@ -36,6 +36,15 @@ DEFAULT_GRIDS: dict[str, tuple[Any, ...]] = {
     "healthy_state.maintenance_post_exclusion_days": (1, 2, 4),
     "healthy_state.minimum_active_power_kw": (25.0, 50.0, 100.0),
     "healthy_state.step_change_exclusion_days": (0.5, 1.0, 2.0),
+    #: PROJECT.md §27.3 lists the normalization method explicitly. condition_binned
+    #: is excluded: the runner refuses it pending the D-12 heteroscedasticity
+    #: decision, so sweeping it would fail every configuration rather than
+    #: measure one.
+    "residual.normalization": ("sigma", "mad", "percentile"),
+    #: ADR-001 / PROJECT.md §22: both branches exist as configuration, and the
+    #: closure evidence §22 names is a comparison of in-control false-alarm
+    #: behaviour under each.
+    "residual.threshold_stats_source": ("training", "validation"),
     "detection.ewma_lambda": (0.1, 0.2, 0.3),
     "detection.control_limit_sigma": (2.0, 3.0, 4.0),
     "detection.persistence_min_samples": (2, 3, 6),

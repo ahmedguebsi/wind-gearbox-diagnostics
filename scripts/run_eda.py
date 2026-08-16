@@ -9,7 +9,7 @@ Inputs are SHA-256 hashed before and after the run and the equality recorded,
 so read-only behaviour is evidenced rather than asserted — the same
 discipline as scripts/dataset_census.py, whose helpers this reuses.
 
-Eight stages, each answering a question the project has open:
+Nine stages, each answering a question the project has open:
 
   A  inventory + provenance      what exactly was read
   B  per-channel statistics      null fraction, range, dispersion, constancy
@@ -25,6 +25,11 @@ Eight stages, each answering a question the project has open:
                                  LIM-023 turned on
   H  attrition preview           rows each cleaning/healthy-state rule would
                                  remove, before any model is fitted
+  I  autocorrelation structure   decorrelation lag of each thermal channel
+                                 and of a load/ambient-detrended proxy —
+                                 the PHASE 10 requirement that sets
+                                 defensible bootstrap block lengths and
+                                 HAC lag windows downstream
 
 Usage (from backend/):
     uv run python ../scripts/run_eda.py --downloads <folder> --output ../artifacts/eda
@@ -280,6 +285,111 @@ def fleet_coherence(per_turbine: dict[str, pd.DataFrame], channels: list[str]) -
 
 
 # --------------------------------------------------------------------------
+# Stage I — autocorrelation structure
+# --------------------------------------------------------------------------
+
+
+def _acf(values: np.ndarray, lag: int) -> float:
+    """Biased sample autocorrelation at one lag (standard 1/n normalisation)."""
+    centred = values - values.mean()
+    denominator = float(np.sum(centred**2))
+    if denominator == 0.0:
+        return 0.0
+    return float(np.sum(centred[lag:] * centred[:-lag]) / denominator)
+
+
+def autocorrelation_structure(
+    frame: pd.DataFrame, channels: list[str], max_lag: int = 2016
+) -> dict[str, Any]:
+    """Decorrelation lag per channel, raw and load/ambient-detrended.
+
+    PROJECT.md §35 PHASE 10 requires EDA of residual autocorrelation. At EDA
+    time no model exists, so this reports two things: the raw channel's
+    autocorrelation, and that of a DETRENDED PROXY formed by removing an
+    ordinary least-squares fit on active power and ambient temperature — the
+    two dominant drivers. The proxy is a stand-in for the NBM residual, not
+    the residual itself, and is labelled as such.
+
+    The number that matters downstream is the decorrelation lag: the first lag
+    at which the sample autocorrelation falls inside the 95% white-noise band.
+    It is the empirical basis for the moving-block bootstrap's block length and
+    for the Diebold-Mariano HAC window, both of which are otherwise chosen from
+    sample SIZE rather than from dependence.
+
+    Computed on the LONGEST CONTIGUOUS RUN at the modal sampling interval, so
+    lags correspond to real elapsed time rather than to row adjacency across
+    gaps. The run length used is reported.
+    """
+    stamps = frame["timestamp"]
+    ordered = frame.loc[stamps.notna()].sort_values("timestamp").reset_index(drop=True)
+    if len(ordered) < 100:
+        return {"note": "too few rows for an autocorrelation estimate"}
+    deltas = ordered["timestamp"].diff()
+    modal = deltas.mode().iloc[0]
+    # Longest run of consecutive rows separated by exactly the modal interval.
+    breaks = np.flatnonzero((deltas != modal).to_numpy()[1:]) + 1
+    bounds = np.concatenate([[0], breaks, [len(ordered)]])
+    lengths = np.diff(bounds)
+    best = int(np.argmax(lengths))
+    segment = ordered.iloc[bounds[best] : bounds[best + 1]]
+
+    interval_minutes = modal.total_seconds() / 60.0
+    out: dict[str, Any] = {
+        "modal_interval": str(modal),
+        "longest_contiguous_run_rows": len(segment),
+        "longest_contiguous_run_hours": round(len(segment) * interval_minutes / 60.0, 2),
+        "note": (
+            "Detrended proxy = channel minus an OLS fit on active power and "
+            "ambient temperature. A stand-in for the NBM residual, NOT the "
+            "residual itself."
+        ),
+        "channels": {},
+    }
+
+    drivers = [c for c in (ACTIVE_POWER, "ambient_temperature") if c in segment.columns]
+    for channel in channels:
+        if channel not in segment.columns:
+            continue
+        usable = segment[[channel, *drivers]].dropna()
+        if len(usable) < 200:
+            continue
+        raw = usable[channel].to_numpy(dtype=float)
+        series: dict[str, np.ndarray] = {"raw": raw}
+        if drivers:
+            design = np.column_stack(
+                [np.ones(len(usable))] + [usable[d].to_numpy(dtype=float) for d in drivers]
+            )
+            coefficients, *_ = np.linalg.lstsq(design, raw, rcond=None)
+            series["detrended_proxy"] = raw - design @ coefficients
+
+        entry: dict[str, Any] = {"n": len(usable)}
+        for label, values in series.items():
+            band = 1.96 / np.sqrt(len(values))
+            limit = int(min(max_lag, len(values) // 4))
+            decorrelation_lag = None
+            curve: dict[str, float] = {}
+            for lag in range(1, limit + 1):
+                value = _acf(values, lag)
+                if lag in (1, 6, 36, 144, 432, 1008, 2016):
+                    curve[str(lag)] = round(value, 6)
+                if decorrelation_lag is None and abs(value) < band:
+                    decorrelation_lag = lag
+            entry[label] = {
+                "acf_at_selected_lags": curve,
+                "white_noise_band": round(float(band), 6),
+                "decorrelation_lag_samples": decorrelation_lag,
+                "decorrelation_lag_hours": (
+                    round(decorrelation_lag * interval_minutes / 60.0, 3)
+                    if decorrelation_lag is not None
+                    else None
+                ),
+                "exceeded_search_limit": decorrelation_lag is None,
+            }
+        out["channels"][channel] = entry
+    return out
+
+
+# --------------------------------------------------------------------------
 # Stage H — attrition preview
 # --------------------------------------------------------------------------
 
@@ -405,6 +515,7 @@ def main() -> int:
             "operating_regime": operating_regime(frame, args.rated_kw),
             "target_relationships": target_relationships(frame, targets, predictors),
             "attrition_preview": attrition_preview(frame, predictors, targets, schema),
+            "autocorrelation_structure": autocorrelation_structure(frame, targets),
         }
 
     print("Computing fleet coherence...")
