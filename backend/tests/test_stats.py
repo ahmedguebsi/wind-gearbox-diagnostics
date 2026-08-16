@@ -5,6 +5,7 @@ verify statistical mechanics against references, never scientific claims.
 """
 
 import inspect
+import math
 
 import numpy as np
 import pandas as pd
@@ -30,7 +31,12 @@ from app.evaluation.comparison import (
     rq2_table,
     verify_comparable,
 )
-from app.evaluation.dm_test import MIN_RELIABLE_N, diebold_mariano
+from app.evaluation.dm_test import (
+    MIN_RELIABLE_N,
+    diebold_mariano,
+    diebold_mariano_by_turbine,
+    suggest_hac_lags,
+)
 
 
 def _ar1(n: int, phi: float, seed: int) -> np.ndarray:
@@ -244,3 +250,71 @@ class TestRq2TableRoundTrip:
         table = rq2_table(report)
         assert isinstance(table, pd.DataFrame)
         assert len(table) == 2
+
+
+class TestPerTurbineDm:
+    """Per-turbine DM and autocorrelation-based HAC lag selection.
+
+    The pooled run_kelmarsh_experiment loss series interleaves six turbines at
+    each 10-minute stamp, so a single DM test treats contemporaneous
+    cross-turbine observations as sequential ones and the n^(1/3) lag rule
+    covers a fraction of the real dependence.
+    """
+
+    @staticmethod
+    def _interleaved(n_per_turbine: int, turbines: int, seed: int):
+        loss_a, loss_b, labels = [], [], []
+        for t in range(turbines):
+            base = _ar1(n_per_turbine, 0.9, seed=seed + t)
+            loss_a.append(np.abs(base) + 1.0)
+            loss_b.append(np.abs(base) + 1.15)  # b is uniformly worse
+            labels.append(np.full(n_per_turbine, f"T{t + 1}"))
+        return (
+            np.concatenate(loss_a),
+            np.concatenate(loss_b),
+            np.concatenate(labels),
+        )
+
+    def test_hac_lag_suggestion_grows_with_dependence(self):
+        white = np.random.default_rng(1).standard_normal(2000)
+        correlated = _ar1(2000, 0.95, seed=2)
+        assert suggest_hac_lags(correlated) > suggest_hac_lags(white)
+
+    def test_hac_suggestion_exceeds_cube_root_rule_on_dependent_data(self):
+        """The concrete reason for this function: on strongly autocorrelated
+        data the size-based rule of thumb is far too small."""
+        correlated = _ar1(4000, 0.95, seed=3)
+        assert suggest_hac_lags(correlated) > math.floor(4000 ** (1 / 3))
+
+    def test_runs_one_test_per_turbine(self):
+        a, b, turbines = self._interleaved(400, 6, seed=10)
+        result = diebold_mariano_by_turbine(a, b, turbines)
+        assert result.n_turbines == 6
+        assert set(result.per_turbine) == {f"T{i}" for i in range(1, 7)}
+
+    def test_unanimous_direction_when_one_model_is_uniformly_better(self):
+        a, b, turbines = self._interleaved(400, 6, seed=11)
+        result = diebold_mariano_by_turbine(a, b, turbines)
+        assert result.favours_a == 6  # loss_a lower everywhere
+        assert result.direction_is_unanimous
+
+    def test_no_combined_p_value_is_reported(self):
+        """Combining dependent per-turbine tests is not supported; the summary
+        reports the weakest case instead."""
+        a, b, turbines = self._interleaved(300, 4, seed=12)
+        payload = diebold_mariano_by_turbine(a, b, turbines).as_dict()
+        assert "combined_p_value" not in payload
+        assert payload["weakest_p_value"] >= min(
+            r["p_value"] for r in payload["per_turbine"].values()
+        )
+
+    def test_misaligned_inputs_rejected(self):
+        a, b, turbines = self._interleaved(100, 2, seed=13)
+        with pytest.raises(ConfigError, match="must align"):
+            diebold_mariano_by_turbine(a, b[:-5], turbines)
+
+    def test_per_turbine_lags_are_recorded(self):
+        a, b, turbines = self._interleaved(400, 3, seed=14)
+        result = diebold_mariano_by_turbine(a, b, turbines)
+        for dm in result.per_turbine.values():
+            assert dm.hac_lags >= 1

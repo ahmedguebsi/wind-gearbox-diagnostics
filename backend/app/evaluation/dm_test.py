@@ -16,6 +16,7 @@ from typing import Any
 import numpy as np
 
 from app.core.errors import ConfigError
+from app.evaluation.bootstrap import sample_autocorrelation
 
 #: Below this many loss differentials the asymptotic normal approximation is
 #: strained; results are flagged and reported descriptively.
@@ -44,6 +45,112 @@ class DmResult:
 
 def _gaussian_two_sided_p(statistic: float) -> float:
     return float(2.0 * (1.0 - 0.5 * (1.0 + math.erf(abs(statistic) / math.sqrt(2.0)))))
+
+
+def suggest_hac_lags(loss_differential: np.ndarray) -> int:
+    """HAC lag count from the loss differential's own autocorrelation.
+
+    The ``floor(n^(1/3))`` rule of thumb is a function of sample SIZE, not of
+    dependence: on ~5e5 ten-minute residuals it yields ~81 lags, and if the
+    series interleaves six turbines that is ~13 samples per machine, roughly
+    two hours of real time. Thermal residuals autocorrelate over far longer,
+    so the long-run variance is understated and |DM| inflated.
+
+    This selects the first lag at which the sample autocorrelation falls
+    inside the 95% white-noise band, then doubles it (the same documented
+    heuristic the moving-block bootstrap uses for block length), bounded to
+    [1, n // 4]. Report the value used — it is part of the result.
+    """
+    n = len(loss_differential)
+    if n < 8:
+        raise ConfigError("Series too short for a HAC lag estimate", n=n)
+    band = 1.96 / math.sqrt(n)
+    cutoff = n // 4
+    for lag in range(1, n // 4 + 1):
+        if abs(sample_autocorrelation(loss_differential, lag)) < band:
+            cutoff = lag
+            break
+    return int(min(max(2 * cutoff, 1), n // 4))
+
+
+@dataclass(frozen=True)
+class PerTurbineDm:
+    """DM computed separately per turbine, with a direction-agreement summary.
+
+    Pooling six machines into one loss series and running a single test treats
+    contemporaneous cross-turbine observations as sequential ones, so neither
+    the HAC correction nor the blocked bootstrap sees the structure it assumes.
+    Running the test per turbine keeps each series a genuine time series.
+
+    No combined p-value is reported. Combining dependent per-turbine tests
+    would need an assumption about their joint distribution that this data
+    cannot support; the honest summary is how many machines agree in direction
+    and what the worst case is.
+    """
+
+    per_turbine: dict[str, DmResult]
+    favours_a: int
+    favours_b: int
+    n_turbines: int
+
+    @property
+    def direction_is_unanimous(self) -> bool:
+        return self.favours_a == self.n_turbines or self.favours_b == self.n_turbines
+
+    @property
+    def weakest_p_value(self) -> float:
+        return max(r.p_value for r in self.per_turbine.values())
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "per_turbine": {k: v.as_dict() for k, v in self.per_turbine.items()},
+            "n_turbines": self.n_turbines,
+            "favours_a": self.favours_a,
+            "favours_b": self.favours_b,
+            "direction_is_unanimous": self.direction_is_unanimous,
+            "weakest_p_value": self.weakest_p_value,
+            "note": (
+                "No combined p-value: per-turbine tests are dependent and "
+                "combining them would require an unsupported assumption about "
+                "their joint distribution."
+            ),
+        }
+
+
+def diebold_mariano_by_turbine(
+    loss_a: np.ndarray,
+    loss_b: np.ndarray,
+    turbines: np.ndarray,
+    hac_lags: int | None = None,
+) -> PerTurbineDm:
+    """Run the DM test separately per turbine on aligned loss series.
+
+    ``hac_lags=None`` selects the lag count per turbine from that turbine's
+    own loss differential via :func:`suggest_hac_lags`.
+    """
+    if not (len(loss_a) == len(loss_b) == len(turbines)):
+        raise ConfigError(
+            "Loss and turbine arrays must align",
+            a=len(loss_a),
+            b=len(loss_b),
+            turbines=len(turbines),
+        )
+    results: dict[str, DmResult] = {}
+    for turbine in sorted({str(t) for t in turbines}):
+        mask = turbines.astype(str) == turbine
+        a, b = np.asarray(loss_a)[mask], np.asarray(loss_b)[mask]
+        if len(a) < 4:
+            continue
+        lags = hac_lags if hac_lags is not None else suggest_hac_lags(a - b)
+        results[turbine] = diebold_mariano(a, b, lags)
+    if not results:
+        raise ConfigError("No turbine had enough observations for a DM test")
+    return PerTurbineDm(
+        per_turbine=results,
+        favours_a=sum(1 for r in results.values() if r.statistic < 0),
+        favours_b=sum(1 for r in results.values() if r.statistic > 0),
+        n_turbines=len(results),
+    )
 
 
 def diebold_mariano(
