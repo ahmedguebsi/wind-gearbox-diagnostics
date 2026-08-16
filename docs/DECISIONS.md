@@ -1163,3 +1163,71 @@ comparison in its evaluation/nacelle_ablation.json):
                    strictly exogenous predictor; nacelle_temperature
                    contributes accuracy, not the ordering. Slice
                    membership identical in both arms (538,045 rows).
+
+## ADR-032 — Elastic Net admitted as a second BASELINE
+
+Status:            CLOSED (2026-08-16) — author ruling (Ahmed Guebsi)
+Question:          ADR-002 fixed the model set at exactly two, and a registry
+                   meta-test asserts that count so a third comparator cannot
+                   appear silently. But the RQ1 headline claim is "XGBoost
+                   beats the linear baseline", and that baseline is
+                   unregularised OLS. Chesterman et al. (Wind Energy Science
+                   8(6):893, 2023) — the closest methodological comparison
+                   found, covering the same NBM task on overlapping thermal
+                   targets — evaluate Elastic Net, LightGBM, SVR and MLP and
+                   recommend ELASTIC NET as the reference: simple,
+                   transparent, robust, and competitive with more complex
+                   models. An examiner familiar with that paper will ask why
+                   the comparison was made against OLS when the work being
+                   cited recommends otherwise. "Our registry only allows two
+                   models" is not a scientific answer.
+Options:           keep OLS alone | replace OLS with Elastic Net | admit
+                   Elastic Net alongside OLS.
+Decision:          Author ruling (2026-08-16). ADMIT ALONGSIDE. The model set
+                   becomes three: one THESIS (multi-output XGBoost) and two
+                   BASELINE (OLS, Elastic Net). ADR-002's constraint is
+                   amended, not bypassed; the registry meta-test is updated to
+                   assert one THESIS and two BASELINE, so a fourth model still
+                   cannot appear without an ADR.
+Justification:     OLS is retained because it is the only reference with ZERO
+                   hyperparameters — nothing about it is tunable after the
+                   fact, and it contributes zero configurations to the §18
+                   multiple-comparison count. That property is what makes it a
+                   measuring stick rather than a competitor (ADR-002), and it
+                   is lost the moment regularisation strength is chosen.
+                   Elastic Net is added because it is the literature's actual
+                   recommendation and a fairer test of whether the thesis
+                   model's advantage is non-linearity rather than merely
+                   regularisation. Reporting both distinguishes those two
+                   explanations; reporting either alone does not.
+Fairness conditions (binding):
+                   (a) Elastic Net is tuned through the SAME chokepoint, on
+                       the SAME ADR-030 inner holdout carved from TRAIN, with
+                       its configuration count recorded in metadata and added
+                       to the multiple-comparison record. An untuned
+                       regularised model would be a strawman in the opposite
+                       direction.
+                   (b) Its selection score is normalised by OLS validation
+                       RMSE — the same rule XGBoost uses (ADR-021), so both
+                       tuned models are selected by mean improvement over the
+                       same fixed reference.
+                   (c) Predictor standardisation is fitted INSIDE the model on
+                       the training rows only. Elastic Net regularisation is
+                       scale-sensitive, and a scaler fitted across a split
+                       boundary is a leakage vector; keeping it inside the
+                       estimator makes that structurally impossible.
+                   (d) All three models see identical training rows.
+Expected effect:   the XGBoost margin is expected to NARROW. If it narrows to
+                   nothing, that is the finding — and a more interesting one
+                   than the current result. The ruling is made on
+                   comparability grounds and is not conditional on the
+                   direction of the outcome.
+Affected modules:  M-17 (second BASELINE registrant), M-15 (tuning chokepoint
+                   unchanged; Elastic Net implements the same `tune`
+                   contract), M-30 (runner fits all registered baselines),
+                   M-28 (comparison tables carry three models), tests
+                   (registry count assertion updated).
+Supersedes:        ADR-002's "exactly two models" clause only. ADR-003 stands:
+                   LightGBM remains omitted, since the question Elastic Net
+                   answers — is the advantage non-linearity or regularisation
+                   — is not one a second boosted-tree model would address.

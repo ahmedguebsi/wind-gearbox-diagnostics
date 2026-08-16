@@ -63,12 +63,28 @@ FAST_PARAMS = {"n_estimators": 20, "max_depth": 3}
 
 
 class TestRegistry:
-    def test_exactly_two_models_one_thesis_one_baseline(self):
-        """M-17 acceptance 2: a third model requires an ADR."""
+    def test_exactly_three_models_one_thesis_two_baseline(self):
+        """M-17 acceptance 2, as amended by ADR-032: the model set is one
+        THESIS and two BASELINE. A fourth model still requires an ADR — the
+        count is asserted, not merely bounded, so scope creep cannot ship."""
         entries = registered()
-        assert len(entries) == 2
+        assert len(entries) == 3
         kinds = sorted(reg.kind for reg in entries.values())
-        assert kinds == [ModelKind.BASELINE, ModelKind.THESIS]
+        assert kinds == [ModelKind.BASELINE, ModelKind.BASELINE, ModelKind.THESIS]
+
+    def test_ols_remains_a_zero_hyperparameter_reference(self):
+        """ADR-032: OLS is kept precisely because nothing about it is tunable,
+        so it contributes zero configurations to the multiple-comparison
+        count. If that stops being true the ruling's justification fails."""
+        import pandas as pd
+
+        from app.models.baselines import LinearRegressionNBM
+
+        X = pd.DataFrame({"a": [1.0, 2.0, 3.0, 4.0], "b": [4.0, 3.0, 2.0, 1.0]})
+        y = pd.DataFrame({"t1": [1.0, 2.0, 3.0, 4.0], "t2": [2.0, 4.0, 6.0, 8.0]})
+        report = LinearRegressionNBM().fit(X, y, seed=42)
+        assert report.hyperparameters == {}
+        assert report.tuning_configurations_evaluated == 0
 
     def test_xgboost_is_the_only_thesis_model(self):
         """M-16 acceptance 1."""
