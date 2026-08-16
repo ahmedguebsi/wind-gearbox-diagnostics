@@ -241,6 +241,41 @@ def split_chronologically(
     return split
 
 
+def inner_chronological_holdout(
+    frame: pd.DataFrame, timestamp_column: str, holdout_fraction: float
+) -> tuple[pd.Index, pd.Index]:
+    """Carve the final ``holdout_fraction`` of a partition, chronologically.
+
+    Exists to separate MODEL SELECTION from THRESHOLD CALIBRATION (ADR-030
+    PROPOSED). Tuning and early stopping previously scored candidates on the
+    healthy VALIDATION block, which also supplies the M-20 in-control
+    characterisation and — under one branch of the open ADR-001 — the
+    normalization and control-limit statistics. Calibrating detection
+    thresholds on data the model was selected to fit well biases the measured
+    in-control false-alarm rate downward, so the thresholds come out too tight.
+
+    Carving the inner block from TRAIN leaves VALIDATION untouched for
+    calibration at no cost in data. The split is strictly chronological — the
+    inner holdout is the LATEST portion of training, so it is still a forecast
+    of the future from the fitting block's point of view, exactly as the real
+    validation block is.
+    """
+    if not 0.0 < holdout_fraction < 1.0:
+        raise SplitPolicyError(
+            "Inner holdout fraction must be in (0, 1)", holdout_fraction=holdout_fraction
+        )
+    ordered = frame.sort_values(timestamp_column)
+    n = len(ordered)
+    n_holdout = int(n * holdout_fraction)
+    if n_holdout < 1 or n - n_holdout < 1:
+        raise SplitPolicyError(
+            "Partition too small to carve an inner holdout",
+            n=n,
+            holdout_fraction=holdout_fraction,
+        )
+    return ordered.index[: n - n_holdout], ordered.index[n - n_holdout :]
+
+
 def rolling_origin_folds(
     dataset: CanonicalDataset, schema: CanonicalSchema, spec: SplitSpec
 ) -> list[tuple[pd.Index, pd.Index]]:

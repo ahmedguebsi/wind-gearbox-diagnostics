@@ -185,6 +185,12 @@ class TuningConfig(StrictModel):
     early_stopping_rounds: int = Field(default=50, ge=1)
     colsample_bytree: float = Field(default=0.8, gt=0.0, le=1.0)
     selection: TuningSelection = TuningSelection.BASELINE_NORMALIZED_MEAN_RMSE
+    #: ADR-030: candidates are scored on an inner holdout carved from the
+    #: END of TRAIN, not on the healthy VALIDATION block. VALIDATION also
+    #: supplies the M-20 in-control characterisation and (under one ADR-001
+    #: branch) the threshold statistics; scoring there would calibrate
+    #: detection thresholds on data the model was selected to fit.
+    inner_holdout_fraction: float = Field(default=0.2, gt=0.0, lt=1.0)
 
     def candidates(self) -> tuple[dict[str, Any], ...]:
         """Full factorial over the swept axes (12 at ADR-021 defaults)."""

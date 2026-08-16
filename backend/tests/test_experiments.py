@@ -571,3 +571,130 @@ class TestResidualDiagnosticsWiring:
             result.metrics["residual_diagnostics"]["validation"]["max_abs_cross_target_pearson"]
             is None
         )
+
+
+class TestSelectionCalibrationSeparation:
+    """ADR-030: tuning must not touch the healthy VALIDATION block.
+
+    VALIDATION supplies the M-20 in-control characterisation and, under one
+    branch of the open ADR-001, the normalization and control-limit
+    statistics. Scoring tuning candidates there calibrates detection
+    thresholds on data the model was selected to fit well, which biases the
+    measured in-control false-alarm rate downward and yields thresholds that
+    are too tight.
+    """
+
+    @staticmethod
+    def _tuned_config():
+        return _config(
+            model={
+                "tuning": {
+                    "max_depth_grid": [2, 3],
+                    "learning_rate_grid": [0.1],
+                    "subsample_grid": [1.0],
+                    "n_estimators": 40,
+                    "early_stopping_rounds": 5,
+                }
+            }
+        )
+
+    def test_tuning_scores_on_an_inner_block_not_on_validation(
+        self, tmp_path, mapping, monkeypatch
+    ):
+        """The load-bearing assertion: the frame handed to the tuning search
+        must be disjoint from the healthy validation partition."""
+        from app.experiments import runner as runner_module
+
+        seen: dict[str, pd.DataFrame] = {}
+        original = runner_module.tune_model
+
+        def spy(model, train_frame, validation_frame, *args, **kwargs):
+            seen["scored_on"] = validation_frame.copy()
+            return original(model, train_frame, validation_frame, *args, **kwargs)
+
+        monkeypatch.setattr(runner_module, "tune_model", spy)
+
+        csv = _write_fixture_csv(tmp_path / "scada_sep.csv", noisy=True)
+        inputs = PipelineInputs(
+            schema=SCHEMA,
+            mapping=mapping,
+            source_paths=(csv,),
+            feature=FeatureConfig(
+                predictors=(WIND_SPEED, ACTIVE_POWER, AMBIENT_TEMPERATURE),
+                targets=(GEARBOX_OIL_TEMPERATURE, GEARBOX_BEARING_TEMPERATURE),
+            ),
+            split_spec=SplitSpec(),
+            cleaning_operations=("drop_missing_any_target",),
+        )
+        result = run_pipeline(self._tuned_config(), inputs)
+
+        scored_stamps = set(seen["scored_on"]["timestamp"])
+        train_boundary, _ = result.split.boundaries_utc
+        # Everything the search saw predates the train/validation boundary.
+        assert scored_stamps
+        assert max(scored_stamps) < train_boundary
+
+    def test_winner_is_refitted_on_the_full_training_partition(self, tmp_path, mapping):
+        """The thesis model and the baseline must see identical training rows,
+        or the RQ1 comparison is confounded by training-set size."""
+        csv = _write_fixture_csv(tmp_path / "scada_refit.csv", noisy=True)
+        inputs = PipelineInputs(
+            schema=SCHEMA,
+            mapping=mapping,
+            source_paths=(csv,),
+            feature=FeatureConfig(
+                predictors=(WIND_SPEED, ACTIVE_POWER, AMBIENT_TEMPERATURE),
+                targets=(GEARBOX_OIL_TEMPERATURE, GEARBOX_BEARING_TEMPERATURE),
+            ),
+            split_spec=SplitSpec(),
+            cleaning_operations=("drop_missing_any_target",),
+        )
+        result = run_pipeline(self._tuned_config(), inputs)
+        assert (
+            result.fit_reports["thesis"].n_training_rows
+            == result.fit_reports["baseline"].n_training_rows
+        )
+
+    def test_tuning_trial_records_survive_the_refit(self, tmp_path, mapping, store):
+        """The refit must not erase the multiple-comparison record."""
+        csv = _write_fixture_csv(tmp_path / "scada_trials.csv", noisy=True)
+        inputs = PipelineInputs(
+            schema=SCHEMA,
+            mapping=mapping,
+            source_paths=(csv,),
+            feature=FeatureConfig(
+                predictors=(WIND_SPEED, ACTIVE_POWER, AMBIENT_TEMPERATURE),
+                targets=(GEARBOX_OIL_TEMPERATURE, GEARBOX_BEARING_TEMPERATURE),
+            ),
+            split_spec=SplitSpec(),
+            cleaning_operations=("drop_missing_any_target",),
+        )
+        experiment_id, _ = run_experiment(self._tuned_config(), inputs, store)
+        record = store.load_record(experiment_id)
+        assert record.model.tuning_configurations_evaluated == 2
+        assert len(record.model.tuning_trials) == 2
+
+    def test_refit_uses_the_early_stopped_count_not_the_ceiling(self):
+        """adopt_tuned_iteration_count pins n_estimators, so the refit is the
+        model that was selected rather than one trained to the grid ceiling."""
+        from app.models.base import adopt_tuned_iteration_count
+
+        class _Stub:
+            def __init__(self):
+                self.hyperparameters = {"n_estimators": 600}
+                self.best_iteration = 17
+
+        stub = _Stub()
+        assert adopt_tuned_iteration_count(stub) == 18
+        assert stub.hyperparameters["n_estimators"] == 18
+
+    def test_model_without_an_iteration_count_is_left_untouched(self):
+        from app.models.base import adopt_tuned_iteration_count
+
+        class _Stub:
+            def __init__(self):
+                self.hyperparameters = {"n_estimators": 300}
+
+        stub = _Stub()
+        assert adopt_tuned_iteration_count(stub) is None
+        assert stub.hyperparameters["n_estimators"] == 300

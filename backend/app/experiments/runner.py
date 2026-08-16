@@ -52,6 +52,7 @@ from app.data.splitting import (
     Split,
     SplitPolicyGuard,
     SplitSpec,
+    inner_chronological_holdout,
     split_chronologically,
 )
 from app.data.validation import DatasetReport, default_rules, validate
@@ -70,7 +71,13 @@ from app.experiments.tracker import (
     ModelMetadata,
     SplitMetadata,
 )
-from app.models.base import FitReport, NormalBehaviourModel, fit_model, tune_model
+from app.models.base import (
+    FitReport,
+    NormalBehaviourModel,
+    adopt_tuned_iteration_count,
+    fit_model,
+    tune_model,
+)
 from app.models.metrics import compute_per_target
 from app.models.registry import create as create_model
 from app.residuals.engine import ResidualFrame, compute_residuals
@@ -360,21 +367,36 @@ def _fit_and_predict(
     )
     models[THESIS_KEY] = thesis
     if tuning.enabled:
+        # ADR-030: selection happens on an inner holdout carved from the END of
+        # TRAIN, never on the healthy VALIDATION block. VALIDATION supplies the
+        # M-20 in-control characterisation and, under one ADR-001 branch, the
+        # threshold statistics; scoring candidates there would calibrate
+        # detection thresholds on data the model was selected to fit well, and
+        # bias the measured in-control false-alarm rate downward.
+        timestamp = inputs.schema.timestamp_name
+        inner_fit_index, inner_score_index = inner_chronological_holdout(
+            partitions["training"], timestamp, tuning.inner_holdout_fraction
+        )
+        inner_fit = partitions["training"].loc[inner_fit_index]
+        inner_score = partitions["training"].loc[inner_score_index]
+
         baseline_rmse: dict[str, float] | None = None
         if tuning.selection is TuningSelection.BASELINE_NORMALIZED_MEAN_RMSE:
             if not config.model.include_baseline:
                 raise ConfigError(
                     "baseline_normalized_mean_rmse selection requires include_baseline (ADR-021)"
                 )
+            # The selection denominator must come from the same block the
+            # candidates are scored on, or the ratio compares two periods.
             baseline_rmse = _per_target_rmse(
-                partitions["validation"],
-                predictions[f"{BASELINE_KEY}_validation"],
+                inner_score,
+                models[BASELINE_KEY].predict(inner_score[predictors]),
                 inputs.feature.targets,
             )
-        fit_reports[THESIS_KEY] = tune_model(
+        tuning_report = tune_model(
             thesis,
-            partitions["training"],
-            partitions["validation"],
+            inner_fit,
+            inner_score,
             inputs.feature,
             inputs.schema,
             candidates=tuning.candidates(),
@@ -382,6 +404,18 @@ def _fit_and_predict(
             selection=tuning.selection.value,
             baseline_validation_rmse=baseline_rmse,
             early_stopping_rounds=tuning.early_stopping_rounds,
+        )
+        # The winner was fitted on the inner block only. Refit it on the FULL
+        # training partition at the selected hyperparameters, holding the tree
+        # count early stopping chose, so the thesis model and the baseline see
+        # exactly the same training rows and the comparison stays fair. The
+        # tuning trial records survive the refit.
+        adopt_tuned_iteration_count(thesis)
+        fit_reports[THESIS_KEY] = fit_model(
+            thesis, partitions["training"], inputs.feature, inputs.schema, seed=seed
+        )
+        assert fit_reports[THESIS_KEY].tuning_configurations_evaluated == len(
+            tuning_report.tuning_trials
         )
     else:
         fit_reports[THESIS_KEY] = fit_model(

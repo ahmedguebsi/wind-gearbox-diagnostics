@@ -88,6 +88,27 @@ def fit_model(
     return model.fit(X, y, seed=seed)
 
 
+def adopt_tuned_iteration_count(model: NormalBehaviourModel) -> int | None:
+    """Pin the iteration count a tuning search's early stopping selected.
+
+    ADR-030 scores candidates on an inner holdout carved from TRAIN, then
+    refits the winner on the FULL training partition so the thesis model and
+    the baseline see identical rows. Without this the refit would run to the
+    grid's ``n_estimators`` ceiling rather than the count early stopping
+    chose, and the refitted model would not be the model that was selected.
+
+    Duck-typed like :func:`tune_model`: a model that does not expose an
+    iteration count is left untouched and reports ``None``.
+    """
+    best = getattr(model, "best_iteration", None)
+    hyperparameters = getattr(model, "hyperparameters", None)
+    if best is None or not isinstance(hyperparameters, dict):
+        return None
+    count = int(best) + 1
+    hyperparameters["n_estimators"] = count
+    return count
+
+
 def tune_model(
     model: NormalBehaviourModel,
     train_frame: pd.DataFrame,

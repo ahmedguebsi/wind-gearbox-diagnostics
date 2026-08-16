@@ -110,6 +110,15 @@ class XGBoostNBM:
                     model.fit(X, y[target])
                 self._models[target] = model
 
+    @property
+    def best_iteration(self) -> int | None:
+        """Iteration chosen by early stopping, or None if it did not run.
+
+        Public because ADR-030 refits the tuned winner on the FULL training
+        block, and that refit must use the tree count early stopping
+        selected rather than the grid's ceiling."""
+        return self._best_iteration()
+
     def _best_iteration(self) -> int | None:
         model = self._models.get("__multi__")
         if model is None:
