@@ -29,3 +29,9 @@ data/processed/*
 # OS noise
 Thumbs.db
 .DS_Store
+
+# Office lock/temp files (Word writes ~$name.docx while a document is open)
+~$*
+*.tmp
+*.wbk
+*.asd

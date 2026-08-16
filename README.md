@@ -83,22 +83,54 @@ Latest runs are in [`docs/evidence/`](docs/evidence/README.md).
 
 ## Experiment reproduction
 
-`python -m app.experiments reproduce EXP-YYYYMMDD-NNN` — arrives with M-31;
-CI will then require EXACT MATCH on a fixture experiment.
+```bash
+cd backend
+uv run python -m app.experiments reproduce EXP-YYYYMMDD-NNN --root ../artifacts
+```
+
+Re-runs the experiment from its stored resolved config and inputs, then diffs
+regenerated metrics against `metrics.json` and requires exact frame equality
+on predictions. A source-file hash mismatch is a hard stop, never a warning.
+CI runs this on a fixture experiment on every push and requires EXACT MATCH.
+
+Note: reproduction resolves source files by the absolute paths recorded in
+provenance, so it currently requires the original data location.
 
 ## Repository layout
 
 ```text
-backend/app/core/   # Layer 0: errors, UTC time, config, logging, versioning
-backend/tests/      # test suite (mirrors module obligations in IMPLEMENTATION_PLAN.md)
-configs/            # example experiment configurations
-data/               # raw/processed data areas (contents not in git) + provenance README
-docs/               # living research documents
-scripts/            # one-off utilities (never scientific evidence)
+backend/app/core/         # Layer 0: errors, UTC time, config, logging, versioning
+backend/app/data/         # schema, mapping, ingestion+provenance, validation,
+                          #   cleaning, healthy-state, splitting, causal guards
+backend/app/models/       # fit/tune chokepoints, registry, XGBoost NBM, baseline, metrics
+backend/app/residuals/    # residual engine, normalizers + Guard 4, EWMA detector
+backend/app/detection/    # single-signal, comparators, coordinated states, matched-FPR
+backend/app/fmea/         # YAML rule base + interpretation engine
+backend/app/evaluation/   # events, event matching, bootstrap, DM test, comparison, sensitivity
+backend/app/experiments/  # pipeline orchestration, artifact store, tracker, reproduce
+backend/tests/            # test suite (mirrors module obligations in IMPLEMENTATION_PLAN.md)
+configs/                  # example + Kelmarsh experiment configurations
+data/                     # raw/processed data areas (contents not in git) + provenance README
+docs/                     # living research documents
+scripts/                  # experiment drivers and census utilities
 ```
+
+Dependency direction is contractually enforced: `import-linter` declares the
+layer stack in `backend/pyproject.toml` and CI fails on any upward import.
 
 ## Status
 
-Milestone 1 (foundation) complete: core modules M-01…M-05, quality gates,
-CI workflow, seed documents. Next: Phase 0.5 dataset due-diligence gate
-(blocking) before any modelling-adjacent work.
+Modules **M-01…M-31 complete**: core, data layer, models (XGBoost THESIS +
+linear BASELINE per ADR-002), residuals, detection, FMEA, evaluation, and
+experiment management including `reproduce`. Not started: M-32 (FastAPI),
+M-33 (dashboard), M-34 (exports) — out of scope for the research instrument.
+
+Phase 0.5 dataset due-diligence gate **APPROVED 2026-08-12** (ADR-015); see
+[`docs/DATASET_DUE_DILIGENCE.md`](docs/DATASET_DUE_DILIGENCE.md). Decisions
+ADR-001…ADR-027 recorded; queue Groups A and B closed, Group C (D-08…D-14)
+open. Four experiments have been run; artifacts are excluded from git by
+design (PROJECT.md §15).
+
+Current methodological review and the frozen experiment protocol:
+[`docs/METHODOLOGY_REVIEW.md`](docs/METHODOLOGY_REVIEW.md) ·
+[`docs/EXPERIMENT_PROTOCOL.md`](docs/EXPERIMENT_PROTOCOL.md).
