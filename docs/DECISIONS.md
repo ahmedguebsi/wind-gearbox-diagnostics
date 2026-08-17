@@ -1323,3 +1323,186 @@ Note on LIM-003:   the register's "14.1% of status rows carry a populated
 Affected modules:  M-12 (`deduplicate_exclusion_windows`),
                    scripts/run_kelmarsh_experiment.py (`alarm_windows`),
                    LIMITATIONS.md (LIM-003 qualification, LIM-006 unchanged).
+
+## ADR-028 — False-alarm rate denominator unified on row-time
+
+Status:            CLOSED (2026-08-17) — author ruling (Ahmed Guebsi)
+Question:          The matched-FPR framework measured observation time as
+                   CALENDAR SPAN (first timestamp to last, plus one interval)
+                   while the sweep script's monitoring-slice check measured it
+                   as ROW-TIME (n_rows × sampling interval). Every healthy
+                   partition is gap-filled — healthy-state exclusion removes
+                   alarm periods and every row below the power floor — so on
+                   those streams the two are different quantities. They were
+                   the two arms of the headline RQ2 comparison.
+Options:           row-time in both arms | calendar span in both arms |
+                   retain both, reporting each explicitly.
+Decision:          ROW-TIME in both arms. Calendar span is retained as a
+                   selectable ObservationBasis so pre-ADR-028 results stay
+                   reproducible, but the two must never be mixed inside one
+                   comparison, and the basis used is recorded on every
+                   OperatingPoint.
+Justification:     Calendar span counts EXCLUDED time in the denominator, so
+                   it understates the rate by roughly the reciprocal of the
+                   retention fraction. PROJECT.md §25 requires false-alarm
+                   rates be measured "on healthy (non-event) periods" and
+                   states the experiment "must be fair"; a denominator that
+                   counts time the detector never observed satisfies neither.
+                   The specification does not define the denominator, so this
+                   closes an underspecified point rather than departing from
+                   one.
+Consequence:       ADR-025's operating points were selected on the understated
+                   side and must be restated. An unknown share of LIM-021's
+                   10–50× validation-to-monitoring gap is this artefact rather
+                   than a transfer effect; the corrected gap is whatever
+                   survives the re-run.
+Evidence trail:    every detection fixture in the suite used a contiguous
+                   timestamp grid, under which the two bases coincide exactly
+                   — which is why 397 passing tests were consistent with the
+                   defect. TestObservationBasis now uses a deliberately gapped
+                   index and asserts the bases differ by more than 10× there.
+Affected modules:  M-23 (ObservationBasis, turbine_years, sweep),
+                   scripts/run_matched_fpr_sweep.py, ADR-025 (restate),
+                   LIM-021, LIM-024.
+
+## ADR-029 — Fleet-relative residuals admitted as a registered ablation arm
+
+Status:            CLOSED (2026-08-17) — author ruling (Ahmed Guebsi)
+Question:          A turbine's residual carries behaviour idiosyncratic to
+                   that machine plus behaviour common to the whole farm —
+                   weather, icing, grid events, seasonal drift. Only the first
+                   is evidence about that machine's gearbox. Should the
+                   pipeline subtract the fleet median?
+Options:           adopt as the headline pipeline | adopt as a registered
+                   ablation arm | do not implement.
+Decision:          REGISTERED ABLATION ARM, default OFF
+                   (residual.fleet_relative = false), with the expected
+                   direction of effect recorded BEFORE execution: fewer false
+                   alarms, and a reduced or eliminated apparent lead on
+                   EVENT-001.
+Justification:     Chesterman et al. (Wind Energy Science 8(6):893, 2023)
+                   subtract the fleet median from raw signals before
+                   modelling; this applies the same idea to residuals after
+                   it. LIM-023 established that the single EVENT-001
+                   detection coincided with an excursion on ALL SIX turbines
+                   and BOTH targets, and was a fleet-wide environmental
+                   response rather than a fault signature. A fleet-relative
+                   residual is the quantity that would have been insensitive
+                   to it.
+Why an arm, not a swap:
+                   the confounder was discovered FROM RESULTS. Changing the
+                   preprocessing in response and then reporting only the new
+                   pipeline would be post-hoc pipeline selection — the
+                   practice the Phase 0.5 gate and ADR-016 pre-registration
+                   exist to prevent. Run as a declared arm with both reported,
+                   the comparison itself becomes the contribution: a
+                   measurement of how much of a coordinated thermal excursion
+                   is farm-common environmental response.
+Binding conditions:
+                   (a) LEAVE-ONE-OUT medians. A turbine contributing to the
+                       median it is compared against pulls the reference
+                       toward its own excursion and attenuates it — worst in
+                       the six-turbine case, where one machine is a sixth of
+                       the reference.
+                   (b) The arm uses CONTEMPORANEOUS cross-turbine information.
+                       Legitimate for a single-machine fault; INVALID for a
+                       fault mode affecting the whole farm, which would be
+                       subtracted away with the weather. This must be stated
+                       wherever the arm is reported — it changes what is being
+                       detected, and is not a free improvement.
+                   (c) Rows whose timestamp offers fewer than two peer
+                       turbines are dropped and counted, never adjusted
+                       against a degenerate reference.
+Scope note:        beyond the original PROJECT.md scope. §24 requires
+                   coordinated residuals; nothing in the specification
+                   addresses farm-common variation. Recorded as an extension,
+                   justified by an empirical finding the project itself
+                   registered.
+Affected modules:  M-19a/M-19b (app/residuals/fleet.py), M-30 (runner wiring,
+                   metrics.detection.fleet_adjustment), LIM-023, Chapter 5.
+
+## ADR-030 — Model selection separated from threshold calibration
+
+Status:            CLOSED (2026-08-17) — author ruling (Ahmed Guebsi)
+Question:          The healthy VALIDATION block performed four jobs at once:
+                   scoring the 12 ADR-021 tuning candidates, supplying the
+                   early-stopping signal, providing the M-20 in-control
+                   characterisation, and — under one branch of the open
+                   ADR-001 — supplying normalization and control-limit
+                   statistics. The first two are SELECTION; the last two are
+                   CALIBRATION.
+Options:           leave as specified | carve an inner holdout from TRAIN |
+                   blocked cross-validation inside TRAIN.
+Decision:          Candidates are scored on an INNER HOLDOUT carved
+                   chronologically from the END of TRAIN
+                   (tuning.inner_holdout_fraction, default 0.2). VALIDATION is
+                   never touched by the search. The winner is then REFITTED on
+                   the full training partition at the selected
+                   hyperparameters, with n_estimators pinned to the count
+                   early stopping chose.
+Justification:     Calibrating detection thresholds on data the model was
+                   explicitly selected to fit well biases the measured
+                   in-control false-alarm rate DOWNWARD, yielding thresholds
+                   that are too tight. That is a candidate mechanism for the
+                   LIM-021 transfer gap which the register does not list, and
+                   unlike the four it does list, it is separable within the
+                   existing data at no cost in rows. PROJECT.md §22 requires
+                   threshold statistics come from healthy data; it does not
+                   anticipate that data also being the selection set.
+Why the refit:     without it the thesis model would train on 80% of TRAIN
+                   while the baselines trained on 100%, and the RQ1
+                   comparison would be confounded by training-set size rather
+                   than by model family. A test asserts all models report
+                   identical n_training_rows.
+Deviation noted:   PROJECT.md §18 states that tuning "happens on the healthy
+                   validation block only". This ruling departs from that
+                   literal wording to satisfy §22's requirement that threshold
+                   statistics be uncontaminated by selection. Recorded rather
+                   than resolved silently, per the PROJECT.md preamble. §18 is
+                   the author's to amend; it has drifted before — see ADR-002
+                   and ADR-032.
+Consequence:       the measured in-control false-alarm rate rises honestly,
+                   thresholds loosen, and the LIM-021 gap is expected to
+                   narrow. Experiments stored before this ruling reproduce
+                   against a config that now materialises
+                   inner_holdout_fraction — the ADR-018 situation, and the
+                   reason per-experiment git hashes exist.
+Affected modules:  M-03 (TuningConfig.inner_holdout_fraction), M-13
+                   (inner_chronological_holdout), M-15
+                   (adopt_tuned_iteration_count), M-16, M-30, ADR-001,
+                   ADR-021, LIM-021, LIM-025.
+
+## ADR-031 — Persistence boundary reported at literature-anchored values
+
+Status:            CLOSED (2026-08-17) — author ruling (Ahmed Guebsi)
+Question:          persistence_min_samples is 3 — thirty minutes at 10-minute
+                   sampling. It defines the isolated/sustained boundary that
+                   decides the ADR-016 criterion. Published practice is an
+                   order of magnitude longer.
+Evidence:          Nogueira, Melani & de Souza (Sensors 25(14):4499, 2025)
+                   require 20 consecutive samples (~3.3 h) before confirming a
+                   fault state. Gück, Roelofs & Faulstich (CARE,
+                   arXiv:2404.10320; Data 9(12):138, 2024) require 72 (~12 h)
+                   before declaring a false-alarm event. LIM-020 already
+                   records that the coordinated pipeline's median episode was
+                   2 samples, so coordination was classified as "isolated"
+                   almost by construction.
+Decision:          The pre-registered verdict at 3 samples STANDS AS COMPUTED
+                   and is reported FIRST, always. The exploratory boundary
+                   sweep is extended from {2, 3, 5, 10} to include 12 and 20,
+                   reported alongside and labelled post-hoc. A check asserts
+                   the pre-registered value is listed first.
+Justification:     ADR-016's criterion and operationalisation were fixed
+                   before the sweep ran; that is what makes the RQ2 answer
+                   evidence rather than post-hoc selection, and it is not
+                   revisable now. But a boundary an order of magnitude below
+                   all published practice cannot be left undefended either.
+                   Reporting both discharges the obligation without
+                   retrofitting the criterion.
+If the verdict flips:
+                   that is a finding about the criterion's CONSTRUCT VALIDITY
+                   — already registered as LIM-020 — and belongs in Chapter 5
+                   as such. Quietly adopting 20 and presenting the result as
+                   the pre-registered answer would not be defensible.
+Affected modules:  scripts/run_matched_fpr_sweep.py (BOUNDARY_GRID), ADR-016,
+                   ADR-017(b), LIM-020, M-27.

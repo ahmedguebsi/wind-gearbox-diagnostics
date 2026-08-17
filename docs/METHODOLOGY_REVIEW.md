@@ -162,6 +162,12 @@ scientific defensibility, **not** on which choice raises the metric.
 
 ## 5. Proposed decisions, in ADR template
 
+> **RATIFIED 2026-08-17.** All four were closed by author ruling and now
+> live in `docs/DECISIONS.md` as ADR-028, ADR-029, ADR-030 and ADR-031,
+> which are the authoritative entries. The drafts below are retained as
+> the record of what was put to the author, unchanged; where they differ
+> in wording from the closed entries, DECISIONS.md governs.
+
 Drafted for author ruling. Numbering continues from ADR-027.
 
 ### ADR-028 (PROPOSED) — Unify the false-alarm rate denominator
