@@ -494,8 +494,12 @@ def main() -> int:
     for path in paths:
         frame, turbine = load_turbine(path, wanted)
         print(f"  {path.name}  ->  {turbine}  ({len(frame):,} rows)")
-        per_file[path.name] = {
+        # Keyed by path relative to the data root, not by bare filename: the
+        # year folder is part of a file's identity, and a reader should not
+        # have to parse it back out of a date range in the name.
+        per_file[str(path.relative_to(args.downloads)).replace("\\", "/")] = {
             "turbine": turbine,
+            "year_folder": path.parent.name,
             "temporal_coverage": temporal_coverage(frame),
             "per_channel": {c: describe(frame[c]) for c in frame.columns if c != "timestamp"},
             "missingness": missingness(frame, predictors + targets),
