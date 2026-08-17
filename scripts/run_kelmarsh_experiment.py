@@ -42,7 +42,10 @@ sys.path.insert(0, str(REPO_ROOT / "backend"))
 
 from app.core.config import AppConfig, HealthyStateConfig, ManualExclusionWindow  # noqa: E402
 from app.data.guards import FeatureConfig  # noqa: E402
-from app.data.healthy_state import ExclusionWindow  # noqa: E402
+from app.data.healthy_state import (  # noqa: E402
+    ExclusionWindow,
+    deduplicate_exclusion_windows,
+)
 from app.data.mapping import load_mapping  # noqa: E402
 from app.data.schema import SCHEMA_VERSION, VariableRole, default_schema  # noqa: E402
 from app.data.splitting import ExperimentFlags, SplitSpec, SplitStrategy  # noqa: E402
@@ -169,7 +172,14 @@ def alarm_windows(
                         reason="alarm_period",
                     )
                 )
+    # ADR-033(b): folder boundaries overlap, so the same Stop/Warning record
+    # can be read twice and yield the same window twice. Idempotent over the
+    # row mask, so the healthy population is unchanged - but the count and the
+    # stored metadata were double-counting.
+    windows_tuple, duplicate_windows = deduplicate_exclusion_windows(windows)
+    windows = list(windows_tuple)
     stats: dict[str, object] = {
+        "duplicate_windows_removed": duplicate_windows,
         "status_rows_seen": n_rows,
         "stop_warning_without_end": skipped_no_end,
         "rows_rejected_by_constructor": len(rejected),

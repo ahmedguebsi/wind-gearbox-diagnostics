@@ -12,6 +12,7 @@ WARNING finding is emitted rather than silent inclusion.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -52,6 +53,33 @@ class ExclusionWindow:
     start_utc: pd.Timestamp
     end_utc: pd.Timestamp
     reason: str
+
+
+def deduplicate_exclusion_windows(
+    windows: Sequence[ExclusionWindow],
+) -> tuple[tuple[ExclusionWindow, ...], int]:
+    """Collapse windows identical in (turbine, start, end, reason). ADR-033(b).
+
+    Status year-folders overlap at their boundaries, so the same Stop/Warning
+    record can be read twice and yield the same window twice. Applying a
+    window is idempotent over the row mask, so duplicates never changed the
+    healthy population — but they inflated the reported window count and were
+    stored twice in experiment metadata.
+
+    Order is preserved (first occurrence wins) so the result is deterministic.
+    Returns the deduplicated windows and the number removed, because a
+    silently-shrinking collection is exactly what the audit trail exists to
+    prevent.
+    """
+    seen: set[tuple[str, pd.Timestamp, pd.Timestamp, str]] = set()
+    unique: list[ExclusionWindow] = []
+    for window in windows:
+        key = (window.turbine, window.start_utc, window.end_utc, window.reason)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(window)
+    return tuple(unique), len(windows) - len(unique)
 
 
 @dataclass(frozen=True)

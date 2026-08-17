@@ -26,6 +26,10 @@ data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 
+# Local copy of the Kelmarsh holdings (4.5 GB, CC-BY-4.0, Zenodo
+# 10.5281/zenodo.5841833). Obtainable from the DOI; never committed.
+dataset/
+
 # OS noise
 Thumbs.db
 .DS_Store

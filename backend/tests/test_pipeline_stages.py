@@ -14,7 +14,11 @@ import pytest
 from app.core.config import HealthyStateConfig
 from app.core.errors import ConfigError, SplitPolicyError
 from app.data.cleaning import OPERATION_REGISTRY, clean
-from app.data.healthy_state import ExclusionWindow, HealthyStateBuilder
+from app.data.healthy_state import (
+    ExclusionWindow,
+    HealthyStateBuilder,
+    deduplicate_exclusion_windows,
+)
 from app.data.ingestion import CanonicalDataset
 from app.data.provenance import ProvenanceChain, ProvenanceRecord
 from app.data.schema import default_schema
@@ -486,3 +490,62 @@ class TestSplitting:
             ).disjoint(),
             bool,
         )
+
+
+class TestExclusionWindowDeduplication:
+    """ADR-033(b): status folders overlap, so the same record can yield the
+    same window twice. The healthy population must be unchanged — window
+    application is idempotent over the row mask — while the count stops
+    double-counting."""
+
+    @staticmethod
+    def _window(turbine="T1", hours=(0, 6), reason="alarm_period"):
+        start = pd.Timestamp("2020-01-05", tz="UTC") + timedelta(hours=hours[0])
+        end = pd.Timestamp("2020-01-05", tz="UTC") + timedelta(hours=hours[1])
+        return ExclusionWindow(turbine, start, end, reason)
+
+    def test_identical_windows_collapse(self):
+        windows = [self._window(), self._window(), self._window()]
+        unique, removed = deduplicate_exclusion_windows(windows)
+        assert len(unique) == 1
+        assert removed == 2
+
+    def test_windows_differing_in_any_field_are_kept(self):
+        windows = [
+            self._window(),
+            self._window(turbine="T2"),
+            self._window(hours=(0, 7)),
+            self._window(reason="maintenance_period"),
+        ]
+        unique, removed = deduplicate_exclusion_windows(windows)
+        assert len(unique) == 4
+        assert removed == 0
+
+    def test_first_occurrence_order_is_preserved(self):
+        a, b = self._window(turbine="T1"), self._window(turbine="T2")
+        unique, _ = deduplicate_exclusion_windows([a, b, a, b])
+        assert [w.turbine for w in unique] == ["T1", "T2"]
+
+    def test_healthy_population_is_unchanged_by_duplicates(self):
+        """The load-bearing property: deduplicating must not move a single
+        row, because applying a window twice excludes the same rows once."""
+        frame = synthetic_frame(days=10)
+        builder = HealthyStateBuilder(
+            HealthyStateConfig(minimum_active_power_kw=-1e9), default_schema()
+        )
+        start = frame["timestamp"].iloc[50]
+        window = ExclusionWindow("T1", start, start + timedelta(hours=3), "alarm_period")
+
+        with_dupes, report_dupes = builder.build(
+            make_dataset(frame), alarm_windows=[window, window, window]
+        )
+        deduped, _ = deduplicate_exclusion_windows([window, window, window])
+        without, report_without = builder.build(make_dataset(frame), alarm_windows=list(deduped))
+
+        assert report_dupes.accepted == report_without.accepted
+        assert report_dupes.exclusion_counts == report_without.exclusion_counts
+        pd.testing.assert_frame_equal(with_dupes.frame, without.frame)
+
+    def test_empty_input(self):
+        unique, removed = deduplicate_exclusion_windows([])
+        assert unique == () and removed == 0

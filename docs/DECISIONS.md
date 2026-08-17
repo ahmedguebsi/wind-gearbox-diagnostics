@@ -1253,3 +1253,73 @@ Deviation noted (added 2026-08-16 on first reading of the governing spec):
                    that XGBoost is THE thesis model and others are
                    comparators, which this ruling preserves — the registry
                    meta-test still asserts exactly one THESIS registrant.
+
+## ADR-033 — Status-record duplication policy
+
+Status:            CLOSED (2026-08-16) — author ruling (Ahmed Guebsi)
+Question:          The six status year-folders together hold 282,235 rows.
+                   Deduplicating on (turbine, `Timestamp start`, `Code`)
+                   finds 329 keys appearing more than once. What policy
+                   governs them, and does any of it reach the alarm windows
+                   that drive healthy-state exclusion?
+Evidence:          Measured directly from the holdings (read-only), 2026-08-16.
+                   The 329 duplicated keys split cleanly in two:
+                   (a) 213 keys / 215 rows with BYTE-IDENTICAL content. These
+                       are the ADR/LIM-006 folder-overlap artefact — the 2017
+                       folder carries 1 row dated 2016-12-17 and the 2021
+                       folder 9 rows dated from 2020-06-07. The count matches
+                       the Phase 0.5 census exactly.
+                   (b) 116 keys whose rows DIFFER — and the difference is
+                       confined entirely to `Timestamp end` and `Duration`.
+                       All seven other fields are identical. Every one of the
+                       116 lies WITHIN a single folder, so none is an overlap
+                       artefact.
+                   Mechanism of (b), established by inspection: 115 of the 116
+                   are an OPEN record (`Timestamp end` = "-") paired with the
+                   CLOSED record for the same event. The remaining key is
+                   Kelmarsh 1, code 6410 "Manual yaw", 2017-01-12 09:36:05,
+                   logged twice with ends 22 seconds apart.
+                   Status composition of (b): all 232 rows are
+                   `Informational`; 230 are code 0 "System OK" and 2 are code
+                   6410. **ZERO are Stop or Warning.**
+Decision:          Author ruling (2026-08-16).
+                   (a) DEDUPLICATION KEY for status records is
+                       (turbine, `Timestamp start`, `Code`, `Duration`) — the
+                       four-field key the Phase 0.5 census used. Under it the
+                       213 identical-content rows collapse and the 116
+                       open/closed pairs remain two distinct records, which is
+                       correct: an open record and its closed counterpart are
+                       different observations of the same event, and the
+                       pipeline already discards records without an end.
+                   (b) EXCLUSION WINDOWS derived from status rows are
+                       deduplicated on (turbine, start, end, reason) before
+                       they reach the HealthyStateBuilder. Identical windows
+                       exclude identical rows, so the healthy population is
+                       unchanged; what changes is that the reported window
+                       COUNT stops double-counting and the stored metadata
+                       stops carrying duplicates.
+                   (c) NO end-time reconciliation rule is adopted for the 116.
+                       Inventing one would fabricate a duration present in
+                       neither source record, which is the same principle
+                       M-09 enforces by raising on conflicting duplicates.
+Why this is safe:  The conflicts are provably inert for the current pipeline.
+                   `alarm_windows()` admits a row only when its Status is Stop
+                   or Warning AND its end is populated; all 232 conflicting
+                   rows are Informational, so none has ever contributed a
+                   window. The policy records a real property of the data
+                   rather than fixing an active defect.
+Measured impact:   Of 6,930 Stop/Warning rows across the full span, 6,913
+                   (99.8%) carry a populated end and are usable as windows;
+                   36 of those are duplicated on the three-field key and
+                   collapse under (b). Because window application is
+                   idempotent over the row mask, the healthy population is
+                   BIT-IDENTICAL before and after — only the count changes.
+Note on LIM-003:   the register's "14.1% of status rows carry a populated
+                   end" is correct but is dominated by Informational rows.
+                   Restricted to the rows the alarm path actually uses, end
+                   coverage is 99.8%. Both figures are true; the second is the
+                   one that bounds the alarm-window derivation, and Chapter 3
+                   should quote it there rather than the headline 14.1%.
+Affected modules:  M-12 (`deduplicate_exclusion_windows`),
+                   scripts/run_kelmarsh_experiment.py (`alarm_windows`),
+                   LIMITATIONS.md (LIM-003 qualification, LIM-006 unchanged).
