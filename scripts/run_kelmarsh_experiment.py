@@ -23,7 +23,7 @@ Run configuration (documented, provisional where noted):
   (rows that cannot be scored or produce residuals; every removal audited).
 
 Usage (from backend/):
-    uv run python ../scripts/run_kelmarsh_experiment.py --approved-by "MK 2026-08-12"
+    uv run python ../scripts/run_kelmarsh_experiment.py --approved-by "AG 2026-08-17"
 """
 
 from __future__ import annotations
@@ -33,6 +33,7 @@ import json
 import sys
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -47,7 +48,12 @@ from app.data.healthy_state import (  # noqa: E402
     deduplicate_exclusion_windows,
 )
 from app.data.mapping import load_mapping  # noqa: E402
-from app.data.schema import SCHEMA_VERSION, VariableRole, default_schema  # noqa: E402
+from app.data.schema import (  # noqa: E402
+    SCHEMA_VERSION,
+    CanonicalSchema,
+    VariableRole,
+    default_schema,
+)
 from app.data.splitting import ExperimentFlags, SplitSpec, SplitStrategy  # noqa: E402
 from app.detection.coordinated import CoordinatedAnalyzer  # noqa: E402
 from app.evaluation.bootstrap import (  # noqa: E402
@@ -60,7 +66,11 @@ from app.evaluation.dm_test import (  # noqa: E402
 )
 from app.evaluation.event_eval import evaluate_events  # noqa: E402
 from app.evaluation.events import EVENT_001, StatusValue, parse_status_csv  # noqa: E402
-from app.experiments.runner import PipelineInputs, run_experiment  # noqa: E402
+from app.experiments.runner import (  # noqa: E402
+    PipelineInputs,
+    PipelineResult,
+    run_experiment,
+)
 from app.experiments.store import ArtifactStore  # noqa: E402
 from app.fmea.interpreter import FmeaInterpreter  # noqa: E402
 from app.fmea.knowledge_base import FmeaKnowledgeBase, default_ruleset_path  # noqa: E402
@@ -273,7 +283,15 @@ def kelmarsh_inputs(
     return inputs, window_stats
 
 
-def three_period_rq1(result, schema, targets):
+def three_period_rq1(
+    result: PipelineResult,
+    schema: CanonicalSchema,
+    targets: tuple[str, ...],
+) -> tuple[
+    dict[str, dict[str, Any]],
+    dict[str, dict[str, Any]],
+    dict[str, pd.DataFrame],
+]:
     """The ADR-022 three-period RQ1 table (CIs + DM per target).
 
     Shared with the ADR-027 nacelle ablation so both arms are computed by
@@ -289,8 +307,8 @@ def three_period_rq1(result, schema, targets):
         "test": cleaned.loc[split.test],
     }
     turbine_column = schema.turbine_id_name
-    rq1: dict[str, dict] = {}
-    dm: dict[str, dict] = {}
+    rq1: dict[str, dict[str, Any]] = {}
+    dm: dict[str, dict[str, Any]] = {}
     for period, frame in period_frames.items():
         frame = frame.sort_values(schema.timestamp_name)
         predicted_by_model = {
@@ -339,9 +357,10 @@ def three_period_rq1(result, schema, targets):
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--approved-by", required=False, default=None)
-    parser.add_argument(
-        "--downloads", type=Path, default=Path(r"C:\Users\mokhles.khedhri.993\Downloads")
-    )
+    # Repo-relative: the holdings are gitignored (4.5 GB) but obtainable from
+    # the DOI, so a checkout plus the Zenodo download reproduces the run
+    # without editing the script. Overridable for a copy held elsewhere.
+    parser.add_argument("--downloads", type=Path, default=REPO_ROOT / "dataset")
     parser.add_argument("--artifacts", type=Path, default=REPO_ROOT / "artifacts")
     args = parser.parse_args()
     if not args.approved_by:
@@ -407,7 +426,10 @@ def main() -> int:
     k1_detections = [d for d in detections if d.turbine == EVENT_001.turbine]
     k1_series = [s for s in series if s.turbine == EVENT_001.turbine]
     states = CoordinatedAnalyzer().combine(k1_detections, k1_series)
-    in_window = [s for s in states if window_start <= s.timestamp_utc <= EVENT_001.end_utc]
+    event_end = EVENT_001.end_utc
+    if event_end is None:  # registered with a concrete end; fail loudly if that changes
+        raise SystemExit("EVENT-001 has no recorded end; cannot bound the diagnostic window")
+    in_window = [s for s in states if window_start <= s.timestamp_utc <= event_end]
     interpreter = FmeaInterpreter(FmeaKnowledgeBase.load(default_ruleset_path()))
     diagnostics = interpreter.interpret(in_window)
     rendering = None

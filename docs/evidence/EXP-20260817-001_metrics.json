@@ -1,0 +1,216 @@
+{
+  "cleaning": {
+    "impossible_predictor_rows_dropped_by_partition": {
+      "test": 220,
+      "train": 354,
+      "validation": 32
+    },
+    "impossible_predictor_rows_dropped_total": 606,
+    "rows_after": 1587474,
+    "rows_removed": 41166
+  },
+  "detection": {
+    "fleet_adjustment": {},
+    "fleet_relative": false,
+    "in_control": {
+      "empirical_rate": 0.1621366321153512,
+      "inflation_ratio": 60.05514057960327,
+      "material_inflation_threshold": 2.0,
+      "materially_inflated": true,
+      "n_exceedances": 44799,
+      "n_points": 276304,
+      "theoretical_rate": 0.002699796063260207
+    },
+    "test_exceedance_points": 411663,
+    "test_points": 1480926,
+    "test_streams": 12
+  },
+  "healthy_state": {
+    "accepted": 656293,
+    "excluded": 190718,
+    "retention_pct": 77.4834
+  },
+  "ingestion": {
+    "duplicates_removed": 0,
+    "rows": 1628640
+  },
+  "nbm": {
+    "baseline": {
+      "monitoring_healthy": {
+        "gearbox_bearing_temperature": {
+          "bias": -0.019520204188357183,
+          "mae": 1.8753836020994898,
+          "r2": 0.5259066399760509,
+          "rmse": 2.5634988634175575
+        },
+        "gearbox_oil_temperature": {
+          "bias": -0.09362387794728495,
+          "mae": 2.111530447957762,
+          "r2": 0.40649059602635695,
+          "rmse": 2.916515260380956
+        }
+      },
+      "test": {
+        "gearbox_bearing_temperature": {
+          "bias": 0.8554387017909518,
+          "mae": 2.851810177636506,
+          "r2": 0.7934662908281541,
+          "rmse": 4.814739972757946
+        },
+        "gearbox_oil_temperature": {
+          "bias": 0.7561995135225632,
+          "mae": 2.967533004929071,
+          "r2": 0.5651888281048734,
+          "rmse": 4.79959964404047
+        }
+      },
+      "validation": {
+        "gearbox_bearing_temperature": {
+          "bias": -0.1984989982791543,
+          "mae": 1.8924525177077907,
+          "r2": 0.5408464369313906,
+          "rmse": 2.5204101367574165
+        },
+        "gearbox_oil_temperature": {
+          "bias": -0.26197276094162225,
+          "mae": 2.1333006311055422,
+          "r2": 0.3840653882171998,
+          "rmse": 2.880115875918997
+        }
+      }
+    },
+    "elastic_net": {
+      "monitoring_healthy": {
+        "gearbox_bearing_temperature": {
+          "bias": 0.007917318342253418,
+          "mae": 1.859615810798097,
+          "r2": 0.5288447748163313,
+          "rmse": 2.5555430347000527
+        },
+        "gearbox_oil_temperature": {
+          "bias": -0.053905001285961145,
+          "mae": 2.1273568524349953,
+          "r2": 0.40157132170670307,
+          "rmse": 2.928577017282347
+        }
+      },
+      "test": {
+        "gearbox_bearing_temperature": {
+          "bias": 1.0358710811860916,
+          "mae": 2.8966335193795447,
+          "r2": 0.7831916063035185,
+          "rmse": 4.933048791129669
+        },
+        "gearbox_oil_temperature": {
+          "bias": 1.0060717853590984,
+          "mae": 3.0719837647538233,
+          "r2": 0.5185836355214887,
+          "rmse": 5.050275728315501
+        }
+      },
+      "validation": {
+        "gearbox_bearing_temperature": {
+          "bias": -0.16280661534662383,
+          "mae": 1.8800155039566278,
+          "r2": 0.5413686009026042,
+          "rmse": 2.51897658396238
+        },
+        "gearbox_oil_temperature": {
+          "bias": -0.1942225668783326,
+          "mae": 2.1442267694444848,
+          "r2": 0.37888826264418873,
+          "rmse": 2.8921946907204457
+        }
+      }
+    },
+    "thesis": {
+      "monitoring_healthy": {
+        "gearbox_bearing_temperature": {
+          "bias": 0.0699858362843234,
+          "mae": 1.5169968856163882,
+          "r2": 0.661934944293787,
+          "rmse": 2.1647180270285498
+        },
+        "gearbox_oil_temperature": {
+          "bias": -0.022059139122223605,
+          "mae": 1.8454320845793795,
+          "r2": 0.49496435729947563,
+          "rmse": 2.6903666175755223
+        }
+      },
+      "test": {
+        "gearbox_bearing_temperature": {
+          "bias": 2.1829454804086774,
+          "mae": 3.504849406694405,
+          "r2": 0.5271314970309202,
+          "rmse": 7.285301987503836
+        },
+        "gearbox_oil_temperature": {
+          "bias": 1.3432965496026137,
+          "mae": 3.093865517484183,
+          "r2": 0.4195047077583839,
+          "rmse": 5.545669916128495
+        }
+      },
+      "validation": {
+        "gearbox_bearing_temperature": {
+          "bias": -0.08780726098912117,
+          "mae": 1.510911512971304,
+          "r2": 0.6880129140511511,
+          "rmse": 2.0775933525055192
+        },
+        "gearbox_oil_temperature": {
+          "bias": -0.15852588510063212,
+          "mae": 1.8298423280795466,
+          "r2": 0.5047890151695036,
+          "rmse": 2.5824849022122955
+        }
+      }
+    }
+  },
+  "residual_diagnostics": {
+    "test": {
+      "max_abs_cross_target_pearson": 0.951881,
+      "max_centre_spread_in_pooled_scales": 0.865795
+    },
+    "training": {
+      "max_abs_cross_target_pearson": 0.931981,
+      "max_centre_spread_in_pooled_scales": 0.916206
+    },
+    "validation": {
+      "max_abs_cross_target_pearson": 0.934523,
+      "max_centre_spread_in_pooled_scales": 0.929646
+    }
+  },
+  "rq1": {
+    "headline_period": "monitoring_healthy",
+    "monitoring_healthy_exclusions": {
+      "alarm_period": 100159,
+      "author_designated_artefact": 187,
+      "author_designated_event_span": 1772,
+      "below_minimum_active_power": 100300
+    },
+    "monitoring_healthy_retention_pct": 72.6633,
+    "monitoring_healthy_rows": 538045,
+    "monitoring_rows": 740463,
+    "period_labels": {
+      "monitoring_healthy": "RQ1 HEADLINE (ADR-022)",
+      "test": "conflates model error with anomalous operation and LIM-013 confounds; not an RQ1 measure",
+      "validation": "selection-biased after tuning (ADR-021)"
+    }
+  },
+  "split": {
+    "healthy_training": 518141,
+    "healthy_validation": 138152,
+    "seasonal_warnings": 1,
+    "test": 740463,
+    "test_is_unfiltered_monitoring": true,
+    "train": 671636,
+    "validation": 175375
+  },
+  "validation": {
+    "errors": 1,
+    "step_changes": 3187,
+    "warnings": 3187
+  }
+}

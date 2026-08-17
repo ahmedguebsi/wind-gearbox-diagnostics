@@ -1,0 +1,464 @@
+{
+  "test": {
+    "cross_target_correlation": {
+      "note": "Pearson is computed on raw residuals and is invariant to the per-target affine normalization of M-19b, so it is also the normalized-residual figure.",
+      "pairs": [
+        {
+          "n_paired": 740463,
+          "pearson": 0.951881,
+          "per_turbine_pearson": {
+            "Kelmarsh 1": 0.946921,
+            "Kelmarsh 2": 0.950895,
+            "Kelmarsh 3": 0.952655,
+            "Kelmarsh 4": 0.956783,
+            "Kelmarsh 5": 0.942441,
+            "Kelmarsh 6": 0.968252
+          },
+          "per_turbine_range": 0.02581100000000003,
+          "spearman": 0.917022,
+          "target_a": "gearbox_bearing_temperature",
+          "target_b": "gearbox_oil_temperature"
+        }
+      ],
+      "partition": "test"
+    },
+    "per_turbine_residual_stats": {
+      "note": "M-19b fits normalization statistics per target, pooled across turbines. centre_spread_in_pooled_scales states how large the between-turbine offset is relative to the single scale applied to all of them.",
+      "partition": "test",
+      "per_stream": [
+        {
+          "mad_scale": 1.656856,
+          "mean": -2.24561,
+          "median": -0.670992,
+          "n": 121489,
+          "std": 6.02103,
+          "target": "gearbox_bearing_temperature",
+          "turbine": "Kelmarsh 1"
+        },
+        {
+          "mad_scale": 2.001524,
+          "mean": -1.113769,
+          "median": -0.021107,
+          "n": 121489,
+          "std": 4.634046,
+          "target": "gearbox_oil_temperature",
+          "turbine": "Kelmarsh 1"
+        },
+        {
+          "mad_scale": 1.589007,
+          "mean": -0.777288,
+          "median": 0.943289,
+          "n": 123841,
+          "std": 6.233924,
+          "target": "gearbox_bearing_temperature",
+          "turbine": "Kelmarsh 2"
+        },
+        {
+          "mad_scale": 1.861609,
+          "mean": -0.147418,
+          "median": 0.8883,
+          "n": 123841,
+          "std": 4.761056,
+          "target": "gearbox_oil_temperature",
+          "turbine": "Kelmarsh 2"
+        },
+        {
+          "mad_scale": 1.794391,
+          "mean": -2.429284,
+          "median": -0.450271,
+          "n": 123795,
+          "std": 6.750696,
+          "target": "gearbox_bearing_temperature",
+          "turbine": "Kelmarsh 3"
+        },
+        {
+          "mad_scale": 2.144421,
+          "mean": -1.305581,
+          "median": -0.0175,
+          "n": 123795,
+          "std": 5.102641,
+          "target": "gearbox_oil_temperature",
+          "turbine": "Kelmarsh 3"
+        },
+        {
+          "mad_scale": 1.7498,
+          "mean": -1.627264,
+          "median": -0.040377,
+          "n": 123852,
+          "std": 6.527622,
+          "target": "gearbox_bearing_temperature",
+          "turbine": "Kelmarsh 4"
+        },
+        {
+          "mad_scale": 2.14631,
+          "mean": -1.723095,
+          "median": -0.698479,
+          "n": 123852,
+          "std": 5.045423,
+          "target": "gearbox_oil_temperature",
+          "turbine": "Kelmarsh 4"
+        },
+        {
+          "mad_scale": 2.293427,
+          "mean": -2.423286,
+          "median": -0.849274,
+          "n": 123816,
+          "std": 6.687768,
+          "target": "gearbox_bearing_temperature",
+          "turbine": "Kelmarsh 5"
+        },
+        {
+          "mad_scale": 2.920845,
+          "mean": -1.133162,
+          "median": -0.238413,
+          "n": 123816,
+          "std": 5.606817,
+          "target": "gearbox_oil_temperature",
+          "turbine": "Kelmarsh 5"
+        },
+        {
+          "mad_scale": 2.315662,
+          "mean": -3.598275,
+          "median": -0.565436,
+          "n": 123670,
+          "std": 8.788875,
+          "target": "gearbox_bearing_temperature",
+          "turbine": "Kelmarsh 6"
+        },
+        {
+          "mad_scale": 2.645309,
+          "mean": -2.634088,
+          "median": -0.613505,
+          "n": 123670,
+          "std": 6.570515,
+          "target": "gearbox_oil_temperature",
+          "turbine": "Kelmarsh 6"
+        }
+      ],
+      "pooled": [
+        {
+          "centre_spread_in_pooled_scales": 0.865795,
+          "per_turbine_centre_spread": 1.792562,
+          "pooled_mad_scale": 2.070424,
+          "pooled_median": -0.259047,
+          "target": "gearbox_bearing_temperature"
+        },
+        {
+          "centre_spread_in_pooled_scales": 0.670288,
+          "per_turbine_centre_spread": 1.586779,
+          "pooled_mad_scale": 2.367309,
+          "pooled_median": -0.079255,
+          "target": "gearbox_oil_temperature"
+        }
+      ]
+    }
+  },
+  "training": {
+    "cross_target_correlation": {
+      "note": "Pearson is computed on raw residuals and is invariant to the per-target affine normalization of M-19b, so it is also the normalized-residual figure.",
+      "pairs": [
+        {
+          "n_paired": 518141,
+          "pearson": 0.931981,
+          "per_turbine_pearson": {
+            "Kelmarsh 1": 0.949793,
+            "Kelmarsh 2": 0.959623,
+            "Kelmarsh 3": 0.955056,
+            "Kelmarsh 4": 0.9546,
+            "Kelmarsh 5": 0.965587,
+            "Kelmarsh 6": 0.960821
+          },
+          "per_turbine_range": 0.015793999999999975,
+          "spearman": 0.898987,
+          "target_a": "gearbox_bearing_temperature",
+          "target_b": "gearbox_oil_temperature"
+        }
+      ],
+      "partition": "training"
+    },
+    "per_turbine_residual_stats": {
+      "note": "M-19b fits normalization statistics per target, pooled across turbines. centre_spread_in_pooled_scales states how large the between-turbine offset is relative to the single scale applied to all of them.",
+      "partition": "training",
+      "per_stream": [
+        {
+          "mad_scale": 1.370867,
+          "mean": -0.4178,
+          "median": -0.445465,
+          "n": 86771,
+          "std": 1.776661,
+          "target": "gearbox_bearing_temperature",
+          "turbine": "Kelmarsh 1"
+        },
+        {
+          "mad_scale": 1.665499,
+          "mean": 0.078269,
+          "median": 0.231674,
+          "n": 86771,
+          "std": 2.189429,
+          "target": "gearbox_oil_temperature",
+          "turbine": "Kelmarsh 1"
+        },
+        {
+          "mad_scale": 1.317404,
+          "mean": 1.003269,
+          "median": 1.051659,
+          "n": 86544,
+          "std": 1.835767,
+          "target": "gearbox_bearing_temperature",
+          "turbine": "Kelmarsh 2"
+        },
+        {
+          "mad_scale": 1.553712,
+          "mean": 0.981766,
+          "median": 1.101551,
+          "n": 86544,
+          "std": 2.195167,
+          "target": "gearbox_oil_temperature",
+          "turbine": "Kelmarsh 2"
+        },
+        {
+          "mad_scale": 1.41213,
+          "mean": -0.143021,
+          "median": -0.106491,
+          "n": 74541,
+          "std": 1.76662,
+          "target": "gearbox_bearing_temperature",
+          "turbine": "Kelmarsh 3"
+        },
+        {
+          "mad_scale": 1.681612,
+          "mean": 0.184843,
+          "median": 0.321587,
+          "n": 74541,
+          "std": 2.163879,
+          "target": "gearbox_oil_temperature",
+          "turbine": "Kelmarsh 3"
+        },
+        {
+          "mad_scale": 1.407549,
+          "mean": 0.455307,
+          "median": 0.464088,
+          "n": 89519,
+          "std": 1.844492,
+          "target": "gearbox_bearing_temperature",
+          "turbine": "Kelmarsh 4"
+        },
+        {
+          "mad_scale": 1.736743,
+          "mean": -0.444033,
+          "median": -0.316441,
+          "n": 89519,
+          "std": 2.281006,
+          "target": "gearbox_oil_temperature",
+          "turbine": "Kelmarsh 4"
+        },
+        {
+          "mad_scale": 1.719482,
+          "mean": -0.5993,
+          "median": -0.395626,
+          "n": 91692,
+          "std": 2.134331,
+          "target": "gearbox_bearing_temperature",
+          "turbine": "Kelmarsh 5"
+        },
+        {
+          "mad_scale": 2.141395,
+          "mean": -0.117671,
+          "median": 0.26964,
+          "n": 91692,
+          "std": 2.672765,
+          "target": "gearbox_oil_temperature",
+          "turbine": "Kelmarsh 5"
+        },
+        {
+          "mad_scale": 1.745572,
+          "mean": -0.289019,
+          "median": -0.038845,
+          "n": 89074,
+          "std": 2.018989,
+          "target": "gearbox_bearing_temperature",
+          "turbine": "Kelmarsh 6"
+        },
+        {
+          "mad_scale": 2.14398,
+          "mean": -0.617907,
+          "median": -0.257799,
+          "n": 89074,
+          "std": 2.530532,
+          "target": "gearbox_oil_temperature",
+          "turbine": "Kelmarsh 6"
+        }
+      ],
+      "pooled": [
+        {
+          "centre_spread_in_pooled_scales": 0.916206,
+          "per_turbine_centre_spread": 1.497124,
+          "pooled_mad_scale": 1.634048,
+          "pooled_median": 0.123878,
+          "target": "gearbox_bearing_temperature"
+        },
+        {
+          "centre_spread_in_pooled_scales": 0.752392,
+          "per_turbine_centre_spread": 1.417992,
+          "pooled_mad_scale": 1.884645,
+          "pooled_median": 0.247414,
+          "target": "gearbox_oil_temperature"
+        }
+      ]
+    }
+  },
+  "validation": {
+    "cross_target_correlation": {
+      "note": "Pearson is computed on raw residuals and is invariant to the per-target affine normalization of M-19b, so it is also the normalized-residual figure.",
+      "pairs": [
+        {
+          "n_paired": 138152,
+          "pearson": 0.934523,
+          "per_turbine_pearson": {
+            "Kelmarsh 1": 0.946242,
+            "Kelmarsh 2": 0.95478,
+            "Kelmarsh 3": 0.949353,
+            "Kelmarsh 4": 0.948065,
+            "Kelmarsh 5": 0.967021,
+            "Kelmarsh 6": 0.949539
+          },
+          "per_turbine_range": 0.020778999999999992,
+          "spearman": 0.913264,
+          "target_a": "gearbox_bearing_temperature",
+          "target_b": "gearbox_oil_temperature"
+        }
+      ],
+      "partition": "validation"
+    },
+    "per_turbine_residual_stats": {
+      "note": "M-19b fits normalization statistics per target, pooled across turbines. centre_spread_in_pooled_scales states how large the between-turbine offset is relative to the single scale applied to all of them.",
+      "partition": "validation",
+      "per_stream": [
+        {
+          "mad_scale": 1.595663,
+          "mean": -0.368951,
+          "median": -0.335762,
+          "n": 24694,
+          "std": 1.894832,
+          "target": "gearbox_bearing_temperature",
+          "turbine": "Kelmarsh 1"
+        },
+        {
+          "mad_scale": 1.910194,
+          "mean": -0.059433,
+          "median": 0.108213,
+          "n": 24694,
+          "std": 2.345876,
+          "target": "gearbox_oil_temperature",
+          "turbine": "Kelmarsh 1"
+        },
+        {
+          "mad_scale": 1.321193,
+          "mean": 1.114891,
+          "median": 1.221848,
+          "n": 23638,
+          "std": 1.888092,
+          "target": "gearbox_bearing_temperature",
+          "turbine": "Kelmarsh 2"
+        },
+        {
+          "mad_scale": 1.540842,
+          "mean": 1.201015,
+          "median": 1.332239,
+          "n": 23638,
+          "std": 2.213148,
+          "target": "gearbox_oil_temperature",
+          "turbine": "Kelmarsh 2"
+        },
+        {
+          "mad_scale": 1.395514,
+          "mean": -0.213403,
+          "median": -0.140194,
+          "n": 18960,
+          "std": 1.767942,
+          "target": "gearbox_bearing_temperature",
+          "turbine": "Kelmarsh 3"
+        },
+        {
+          "mad_scale": 1.722695,
+          "mean": 0.168644,
+          "median": 0.353033,
+          "n": 18960,
+          "std": 2.240994,
+          "target": "gearbox_oil_temperature",
+          "turbine": "Kelmarsh 3"
+        },
+        {
+          "mad_scale": 1.446619,
+          "mean": 0.490537,
+          "median": 0.493069,
+          "n": 24378,
+          "std": 1.865787,
+          "target": "gearbox_bearing_temperature",
+          "turbine": "Kelmarsh 4"
+        },
+        {
+          "mad_scale": 1.778035,
+          "mean": -0.270278,
+          "median": -0.181763,
+          "n": 24378,
+          "std": 2.33048,
+          "target": "gearbox_oil_temperature",
+          "turbine": "Kelmarsh 4"
+        },
+        {
+          "mad_scale": 1.72813,
+          "mean": -0.265378,
+          "median": -0.271126,
+          "n": 24125,
+          "std": 2.447064,
+          "target": "gearbox_bearing_temperature",
+          "turbine": "Kelmarsh 5"
+        },
+        {
+          "mad_scale": 2.212057,
+          "mean": 0.397918,
+          "median": 0.487278,
+          "n": 24125,
+          "std": 3.222865,
+          "target": "gearbox_oil_temperature",
+          "turbine": "Kelmarsh 5"
+        },
+        {
+          "mad_scale": 1.666477,
+          "mean": -0.296199,
+          "median": 0.020767,
+          "n": 22357,
+          "std": 2.025164,
+          "target": "gearbox_bearing_temperature",
+          "turbine": "Kelmarsh 6"
+        },
+        {
+          "mad_scale": 2.003674,
+          "mean": -0.502291,
+          "median": -0.084038,
+          "n": 22357,
+          "std": 2.551659,
+          "target": "gearbox_oil_temperature",
+          "turbine": "Kelmarsh 6"
+        }
+      ],
+      "pooled": [
+        {
+          "centre_spread_in_pooled_scales": 0.929646,
+          "per_turbine_centre_spread": 1.55761,
+          "pooled_mad_scale": 1.675487,
+          "pooled_median": 0.187222,
+          "target": "gearbox_bearing_temperature"
+        },
+        {
+          "centre_spread_in_pooled_scales": 0.773957,
+          "per_turbine_centre_spread": 1.514002,
+          "pooled_mad_scale": 1.956183,
+          "pooled_median": 0.359646,
+          "target": "gearbox_oil_temperature"
+        }
+      ]
+    }
+  }
+}

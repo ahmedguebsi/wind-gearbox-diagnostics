@@ -1,0 +1,1025 @@
+{
+  "experiment_id": "EXP-20260817-001",
+  "approved_by": "AG 2026-08-17",
+  "alarm_window_stats": {
+    "duplicate_windows_removed": 385,
+    "status_rows_seen": 282234,
+    "stop_warning_without_end": 0,
+    "rows_rejected_by_constructor": 1,
+    "rejected_examples": [
+      {
+        "turbine": "Kelmarsh 2",
+        "start": "2016-10-10 13:43:49",
+        "end": "2016-10-10 13:07:00",
+        "code": "20",
+        "status": "Stop",
+        "reason": "Event ends before it starts [start='2016-10-10 13:43:49+00:00', end='2016-10-10 13:07:00+00:00']"
+      }
+    ]
+  },
+  "n_alarm_windows": 5829,
+  "rq1_headline_period": "monitoring_healthy",
+  "rq1_period_labels": {
+    "validation": "selection-biased after tuning (ADR-021)",
+    "monitoring_healthy": "RQ1 HEADLINE (ADR-022)",
+    "test": "conflates model error with anomalous operation and LIM-013 confounds; not an RQ1 measure"
+  },
+  "rq1_metrics_with_cis": {
+    "validation": {
+      "thesis": {
+        "gearbox_bearing_temperature": {
+          "block_length": {
+            "value": 864.0
+          },
+          "rmse": {
+            "point": 2.0775933525055192,
+            "lower": 1.976033845140249,
+            "upper": 2.1835871319670024
+          },
+          "mae": {
+            "point": 1.510911512971304,
+            "lower": 1.4430597066257995,
+            "upper": 1.5796568401556077
+          },
+          "bias": {
+            "point": 0.08780726098912117,
+            "lower": 0.002505740116919503,
+            "upper": 0.16994196916953297
+          },
+          "r2_fixed_denominator": {
+            "point": 0.6880129140511511,
+            "lower": 0.6553672237000343,
+            "upper": 0.7177692809027846
+          }
+        },
+        "gearbox_oil_temperature": {
+          "block_length": {
+            "value": 864.0
+          },
+          "rmse": {
+            "point": 2.5824849022122955,
+            "lower": 2.4238777096576443,
+            "upper": 2.736407230978664
+          },
+          "mae": {
+            "point": 1.8298423280795466,
+            "lower": 1.7351771907351414,
+            "upper": 1.924819057060866
+          },
+          "bias": {
+            "point": 0.15852588510063212,
+            "lower": 0.03766319518760539,
+            "upper": 0.27192410609201495
+          },
+          "r2_fixed_denominator": {
+            "point": 0.5047890151695036,
+            "lower": 0.44399826538862897,
+            "upper": 0.5637493385801704
+          }
+        }
+      },
+      "baseline": {
+        "gearbox_bearing_temperature": {
+          "block_length": {
+            "value": 940.0
+          },
+          "rmse": {
+            "point": 2.5204101367574165,
+            "lower": 2.3942170875485655,
+            "upper": 2.65070876780079
+          },
+          "mae": {
+            "point": 1.8924525177077904,
+            "lower": 1.8144848574045394,
+            "upper": 1.9751227186154299
+          },
+          "bias": {
+            "point": 0.1984989982791543,
+            "lower": 0.04748617959295215,
+            "upper": 0.3328626362409587
+          },
+          "r2_fixed_denominator": {
+            "point": 0.5408464369313906,
+            "lower": 0.4921452062606795,
+            "upper": 0.5856736294154132
+          }
+        },
+        "gearbox_oil_temperature": {
+          "block_length": {
+            "value": 940.0
+          },
+          "rmse": {
+            "point": 2.8801158759189964,
+            "lower": 2.68738013175736,
+            "upper": 3.0942328276052717
+          },
+          "mae": {
+            "point": 2.1333006311055422,
+            "lower": 2.033947474523424,
+            "upper": 2.2325210188469
+          },
+          "bias": {
+            "point": 0.2619727609416223,
+            "lower": 0.08203429035058386,
+            "upper": 0.4237368967937513
+          },
+          "r2_fixed_denominator": {
+            "point": 0.38406538821720004,
+            "lower": 0.28908010838868525,
+            "upper": 0.46374309833758354
+          }
+        }
+      }
+    },
+    "monitoring_healthy": {
+      "thesis": {
+        "gearbox_bearing_temperature": {
+          "block_length": {
+            "value": 4050.0
+          },
+          "rmse": {
+            "point": 2.1647180270285498,
+            "lower": 2.0744606658629094,
+            "upper": 2.2576980512993123
+          },
+          "mae": {
+            "point": 1.5169968856163882,
+            "lower": 1.4597933813945483,
+            "upper": 1.5732223102194647
+          },
+          "bias": {
+            "point": -0.06998583628432335,
+            "lower": -0.13514421865450962,
+            "upper": -0.007754293850930868
+          },
+          "r2_fixed_denominator": {
+            "point": 0.661934944293787,
+            "lower": 0.632269771894362,
+            "upper": 0.6895383055957989
+          }
+        },
+        "gearbox_oil_temperature": {
+          "block_length": {
+            "value": 2222.0
+          },
+          "rmse": {
+            "point": 2.6903666175755223,
+            "lower": 2.583764846528665,
+            "upper": 2.810106783236975
+          },
+          "mae": {
+            "point": 1.8454320845793797,
+            "lower": 1.784910282782487,
+            "upper": 1.9136303692973127
+          },
+          "bias": {
+            "point": 0.022059139122223594,
+            "lower": -0.049897722655765524,
+            "upper": 0.09237415448619402
+          },
+          "r2_fixed_denominator": {
+            "point": 0.49496435729947563,
+            "lower": 0.44900869578085945,
+            "upper": 0.5341940104472152
+          }
+        }
+      },
+      "baseline": {
+        "gearbox_bearing_temperature": {
+          "block_length": {
+            "value": 14842.0
+          },
+          "rmse": {
+            "point": 2.5634988634175575,
+            "lower": 2.4475375095538663,
+            "upper": 2.6798629609183435
+          },
+          "mae": {
+            "point": 1.8753836020994896,
+            "lower": 1.8044026635873907,
+            "upper": 1.9461794829603112
+          },
+          "bias": {
+            "point": 0.019520204188357163,
+            "lower": -0.11419605305651685,
+            "upper": 0.16272773376592448
+          },
+          "r2_fixed_denominator": {
+            "point": 0.5259066399760508,
+            "lower": 0.4818890292478345,
+            "upper": 0.5678282971904923
+          }
+        },
+        "gearbox_oil_temperature": {
+          "block_length": {
+            "value": 11878.0
+          },
+          "rmse": {
+            "point": 2.916515260380956,
+            "lower": 2.7666139883910574,
+            "upper": 3.07508946049293
+          },
+          "mae": {
+            "point": 2.111530447957762,
+            "lower": 2.025907059934668,
+            "upper": 2.2081256909752915
+          },
+          "bias": {
+            "point": 0.09362387794728495,
+            "lower": -0.05454105279345664,
+            "upper": 0.23643754701209227
+          },
+          "r2_fixed_denominator": {
+            "point": 0.40649059602635695,
+            "lower": 0.34019650664233797,
+            "upper": 0.46593239181825374
+          }
+        }
+      }
+    },
+    "test": {
+      "thesis": {
+        "gearbox_bearing_temperature": {
+          "block_length": {
+            "value": 24916.0
+          },
+          "rmse": {
+            "point": 7.285301987503836,
+            "lower": 6.0541270812090024,
+            "upper": 8.562047328586518
+          },
+          "mae": {
+            "point": 3.504849406694405,
+            "lower": 2.9984031737209724,
+            "upper": 4.071061968041606
+          },
+          "bias": {
+            "point": -2.1829454804086774,
+            "lower": -2.778038350527019,
+            "upper": -1.6413909874752075
+          },
+          "r2_fixed_denominator": {
+            "point": 0.5271314970309201,
+            "lower": 0.3468684284572746,
+            "upper": 0.6734509971871337
+          }
+        },
+        "gearbox_oil_temperature": {
+          "block_length": {
+            "value": 23184.0
+          },
+          "rmse": {
+            "point": 5.545669916128495,
+            "lower": 4.664856926050304,
+            "upper": 6.44429272933234
+          },
+          "mae": {
+            "point": 3.093865517484183,
+            "lower": 2.710656628967107,
+            "upper": 3.530314449211361
+          },
+          "bias": {
+            "point": -1.3432965496026137,
+            "lower": -1.8137994486670708,
+            "upper": -0.9060535929672228
+          },
+          "r2_fixed_denominator": {
+            "point": 0.4195047077583839,
+            "lower": 0.21613512757095174,
+            "upper": 0.5892596276689679
+          }
+        }
+      },
+      "baseline": {
+        "gearbox_bearing_temperature": {
+          "block_length": {
+            "value": 132858.0
+          },
+          "rmse": {
+            "point": 4.814739972757946,
+            "lower": 3.578521867277492,
+            "upper": 6.250404293826477
+          },
+          "mae": {
+            "point": 2.851810177636506,
+            "lower": 2.387935329436941,
+            "upper": 3.504497576096981
+          },
+          "bias": {
+            "point": -0.8554387017909518,
+            "lower": -1.6676628877185007,
+            "upper": -0.1858154354095205
+          },
+          "r2_fixed_denominator": {
+            "point": 0.7934662908281541,
+            "lower": 0.6519340851869052,
+            "upper": 0.8859086757294478
+          }
+        },
+        "gearbox_oil_temperature": {
+          "block_length": {
+            "value": 27134.0
+          },
+          "rmse": {
+            "point": 4.79959964404047,
+            "lower": 3.968061125426123,
+            "upper": 5.640638641214003
+          },
+          "mae": {
+            "point": 2.967533004929072,
+            "lower": 2.647784548745046,
+            "upper": 3.353431178928286
+          },
+          "bias": {
+            "point": -0.7561995135225634,
+            "lower": -1.2560336558317993,
+            "upper": -0.3195832898492888
+          },
+          "r2_fixed_denominator": {
+            "point": 0.5651888281048734,
+            "lower": 0.3994526780047258,
+            "upper": 0.702800970597285
+          }
+        }
+      }
+    }
+  },
+  "dm_thesis_vs_baseline_squared_error": {
+    "validation": {
+      "gearbox_bearing_temperature": {
+        "pooled_interleaved": {
+          "statistic": -19.51650767436573,
+          "p_value": 0.0,
+          "n": 138152,
+          "hac_lags": 51,
+          "reliable": true,
+          "caveat": null
+        },
+        "per_turbine": {
+          "per_turbine": {
+            "Kelmarsh 1": {
+              "statistic": -10.206205075620957,
+              "p_value": 0.0,
+              "n": 24694,
+              "hac_lags": 70,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 2": {
+              "statistic": -11.598416614119206,
+              "p_value": 0.0,
+              "n": 23638,
+              "hac_lags": 82,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 3": {
+              "statistic": -11.867953613398413,
+              "p_value": 0.0,
+              "n": 18960,
+              "hac_lags": 80,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 4": {
+              "statistic": -12.075370747954393,
+              "p_value": 0.0,
+              "n": 24378,
+              "hac_lags": 74,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 5": {
+              "statistic": -4.494319134957925,
+              "p_value": 6.979289352226914e-06,
+              "n": 24125,
+              "hac_lags": 70,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 6": {
+              "statistic": -11.540966868105947,
+              "p_value": 0.0,
+              "n": 22357,
+              "hac_lags": 94,
+              "reliable": true,
+              "caveat": null
+            }
+          },
+          "n_turbines": 6,
+          "favours_a": 6,
+          "favours_b": 0,
+          "direction_is_unanimous": true,
+          "weakest_p_value": 6.979289352226914e-06,
+          "note": "No combined p-value: per-turbine tests are dependent and combining them would require an unsupported assumption about their joint distribution."
+        },
+        "note": "per_turbine is the defensible figure; pooled_interleaved is retained only so the correction can be measured."
+      },
+      "gearbox_oil_temperature": {
+        "pooled_interleaved": {
+          "statistic": -8.945574742872155,
+          "p_value": 0.0,
+          "n": 138152,
+          "hac_lags": 51,
+          "reliable": true,
+          "caveat": null
+        },
+        "per_turbine": {
+          "per_turbine": {
+            "Kelmarsh 1": {
+              "statistic": -5.5570862376035945,
+              "p_value": 2.7431525051468952e-08,
+              "n": 24694,
+              "hac_lags": 64,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 2": {
+              "statistic": -5.748879667141296,
+              "p_value": 8.983672472595572e-09,
+              "n": 23638,
+              "hac_lags": 82,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 3": {
+              "statistic": -8.359862232488313,
+              "p_value": 0.0,
+              "n": 18960,
+              "hac_lags": 68,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 4": {
+              "statistic": -6.545562043584256,
+              "p_value": 5.927214274947801e-11,
+              "n": 24378,
+              "hac_lags": 70,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 5": {
+              "statistic": 1.503351396990876,
+              "p_value": 0.1327484528296312,
+              "n": 24125,
+              "hac_lags": 48,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 6": {
+              "statistic": -8.906222341303085,
+              "p_value": 0.0,
+              "n": 22357,
+              "hac_lags": 70,
+              "reliable": true,
+              "caveat": null
+            }
+          },
+          "n_turbines": 6,
+          "favours_a": 5,
+          "favours_b": 1,
+          "direction_is_unanimous": false,
+          "weakest_p_value": 0.1327484528296312,
+          "note": "No combined p-value: per-turbine tests are dependent and combining them would require an unsupported assumption about their joint distribution."
+        },
+        "note": "per_turbine is the defensible figure; pooled_interleaved is retained only so the correction can be measured."
+      }
+    },
+    "monitoring_healthy": {
+      "gearbox_bearing_temperature": {
+        "pooled_interleaved": {
+          "statistic": -32.155956493539215,
+          "p_value": 0.0,
+          "n": 538045,
+          "hac_lags": 81,
+          "reliable": true,
+          "caveat": null
+        },
+        "per_turbine": {
+          "per_turbine": {
+            "Kelmarsh 1": {
+              "statistic": -15.490454534259504,
+              "p_value": 0.0,
+              "n": 91561,
+              "hac_lags": 140,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 2": {
+              "statistic": -17.669110627158513,
+              "p_value": 0.0,
+              "n": 88647,
+              "hac_lags": 326,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 3": {
+              "statistic": -23.473474990554784,
+              "p_value": 0.0,
+              "n": 92211,
+              "hac_lags": 128,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 4": {
+              "statistic": -21.50842827902655,
+              "p_value": 0.0,
+              "n": 99319,
+              "hac_lags": 160,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 5": {
+              "statistic": -7.511140248658613,
+              "p_value": 5.861977570020827e-14,
+              "n": 101837,
+              "hac_lags": 140,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 6": {
+              "statistic": -24.358021734579605,
+              "p_value": 0.0,
+              "n": 64470,
+              "hac_lags": 96,
+              "reliable": true,
+              "caveat": null
+            }
+          },
+          "n_turbines": 6,
+          "favours_a": 6,
+          "favours_b": 0,
+          "direction_is_unanimous": true,
+          "weakest_p_value": 5.861977570020827e-14,
+          "note": "No combined p-value: per-turbine tests are dependent and combining them would require an unsupported assumption about their joint distribution."
+        },
+        "note": "per_turbine is the defensible figure; pooled_interleaved is retained only so the correction can be measured."
+      },
+      "gearbox_oil_temperature": {
+        "pooled_interleaved": {
+          "statistic": -15.440830437417382,
+          "p_value": 0.0,
+          "n": 538045,
+          "hac_lags": 81,
+          "reliable": true,
+          "caveat": null
+        },
+        "per_turbine": {
+          "per_turbine": {
+            "Kelmarsh 1": {
+              "statistic": -12.818280110501995,
+              "p_value": 0.0,
+              "n": 91561,
+              "hac_lags": 82,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 2": {
+              "statistic": -10.720040024829169,
+              "p_value": 0.0,
+              "n": 88647,
+              "hac_lags": 108,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 3": {
+              "statistic": -17.793449742038664,
+              "p_value": 0.0,
+              "n": 92211,
+              "hac_lags": 74,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 4": {
+              "statistic": -12.947526568583978,
+              "p_value": 0.0,
+              "n": 99319,
+              "hac_lags": 142,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 5": {
+              "statistic": 3.572763043943691,
+              "p_value": 0.00035323436978784706,
+              "n": 101837,
+              "hac_lags": 104,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 6": {
+              "statistic": -20.368066076063805,
+              "p_value": 0.0,
+              "n": 64470,
+              "hac_lags": 82,
+              "reliable": true,
+              "caveat": null
+            }
+          },
+          "n_turbines": 6,
+          "favours_a": 5,
+          "favours_b": 1,
+          "direction_is_unanimous": false,
+          "weakest_p_value": 0.00035323436978784706,
+          "note": "No combined p-value: per-turbine tests are dependent and combining them would require an unsupported assumption about their joint distribution."
+        },
+        "note": "per_turbine is the defensible figure; pooled_interleaved is retained only so the correction can be measured."
+      }
+    },
+    "test": {
+      "gearbox_bearing_temperature": {
+        "pooled_interleaved": {
+          "statistic": 27.02549792543072,
+          "p_value": 0.0,
+          "n": 740463,
+          "hac_lags": 90,
+          "reliable": true,
+          "caveat": null
+        },
+        "per_turbine": {
+          "per_turbine": {
+            "Kelmarsh 1": {
+              "statistic": 6.272022359218324,
+              "p_value": 3.56388252242823e-10,
+              "n": 121489,
+              "hac_lags": 1240,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 2": {
+              "statistic": 5.573399588835775,
+              "p_value": 2.498156659314077e-08,
+              "n": 123841,
+              "hac_lags": 1186,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 3": {
+              "statistic": 5.032354352593103,
+              "p_value": 4.844926668745586e-07,
+              "n": 123795,
+              "hac_lags": 3564,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 4": {
+              "statistic": 5.122726895890539,
+              "p_value": 3.011483777903834e-07,
+              "n": 123852,
+              "hac_lags": 1164,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 5": {
+              "statistic": 7.69757742125124,
+              "p_value": 1.3766765505351941e-14,
+              "n": 123816,
+              "hac_lags": 632,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 6": {
+              "statistic": 2.273521106529246,
+              "p_value": 0.022994795682097058,
+              "n": 123670,
+              "hac_lags": 7912,
+              "reliable": true,
+              "caveat": null
+            }
+          },
+          "n_turbines": 6,
+          "favours_a": 0,
+          "favours_b": 6,
+          "direction_is_unanimous": true,
+          "weakest_p_value": 0.022994795682097058,
+          "note": "No combined p-value: per-turbine tests are dependent and combining them would require an unsupported assumption about their joint distribution."
+        },
+        "note": "per_turbine is the defensible figure; pooled_interleaved is retained only so the correction can be measured."
+      },
+      "gearbox_oil_temperature": {
+        "pooled_interleaved": {
+          "statistic": 18.092249496834306,
+          "p_value": 0.0,
+          "n": 740463,
+          "hac_lags": 90,
+          "reliable": true,
+          "caveat": null
+        },
+        "per_turbine": {
+          "per_turbine": {
+            "Kelmarsh 1": {
+              "statistic": 4.986830148650413,
+              "p_value": 6.137797969874015e-07,
+              "n": 121489,
+              "hac_lags": 614,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 2": {
+              "statistic": 4.224777699592563,
+              "p_value": 2.3917675536777594e-05,
+              "n": 123841,
+              "hac_lags": 1166,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 3": {
+              "statistic": 3.26924448700062,
+              "p_value": 0.0010783508166776201,
+              "n": 123795,
+              "hac_lags": 602,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 4": {
+              "statistic": 4.202470451695051,
+              "p_value": 2.640177200685656e-05,
+              "n": 123852,
+              "hac_lags": 1060,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 5": {
+              "statistic": 7.357133326479129,
+              "p_value": 1.8784973576657649e-13,
+              "n": 123816,
+              "hac_lags": 608,
+              "reliable": true,
+              "caveat": null
+            },
+            "Kelmarsh 6": {
+              "statistic": 2.9554192425424786,
+              "p_value": 0.00312244430123787,
+              "n": 123670,
+              "hac_lags": 5038,
+              "reliable": true,
+              "caveat": null
+            }
+          },
+          "n_turbines": 6,
+          "favours_a": 0,
+          "favours_b": 6,
+          "direction_is_unanimous": true,
+          "weakest_p_value": 0.00312244430123787,
+          "note": "No combined p-value: per-turbine tests are dependent and combining them would require an unsupported assumption about their joint distribution."
+        },
+        "note": "per_turbine is the defensible figure; pooled_interleaved is retained only so the correction can be measured."
+      }
+    }
+  },
+  "rq1_slice": {
+    "monitoring_rows": 740463,
+    "monitoring_healthy_rows": 538045,
+    "retention_pct": 72.6633,
+    "exclusions": {
+      "alarm_period": 100159,
+      "author_designated_event_span": 1772,
+      "author_designated_artefact": 187,
+      "below_minimum_active_power": 100300
+    }
+  },
+  "event001_slice_check": {
+    "event_window_utc": [
+      "2019-02-24 16:46:28+00:00",
+      "2019-05-30 07:34:04+00:00"
+    ],
+    "slice_rows_in_event_window": 0,
+    "detection_rows_in_event_window": 11280
+  },
+  "tuning": {
+    "configurations_evaluated": 12,
+    "selected_hyperparameters": {
+      "n_estimators": 432,
+      "learning_rate": 0.03,
+      "max_depth": 8,
+      "subsample": 1.0,
+      "colsample_bytree": 0.8
+    },
+    "trials": [
+      {
+        "hyperparameters": {
+          "max_depth": 4,
+          "learning_rate": 0.03,
+          "subsample": 0.8
+        },
+        "seed": 42,
+        "score": 0.844625,
+        "best_iteration": 598
+      },
+      {
+        "hyperparameters": {
+          "max_depth": 4,
+          "learning_rate": 0.03,
+          "subsample": 1.0
+        },
+        "seed": 42,
+        "score": 0.845163,
+        "best_iteration": 599
+      },
+      {
+        "hyperparameters": {
+          "max_depth": 4,
+          "learning_rate": 0.05,
+          "subsample": 0.8
+        },
+        "seed": 42,
+        "score": 0.839158,
+        "best_iteration": 597
+      },
+      {
+        "hyperparameters": {
+          "max_depth": 4,
+          "learning_rate": 0.05,
+          "subsample": 1.0
+        },
+        "seed": 42,
+        "score": 0.84015,
+        "best_iteration": 598
+      },
+      {
+        "hyperparameters": {
+          "max_depth": 6,
+          "learning_rate": 0.03,
+          "subsample": 0.8
+        },
+        "seed": 42,
+        "score": 0.832976,
+        "best_iteration": 597
+      },
+      {
+        "hyperparameters": {
+          "max_depth": 6,
+          "learning_rate": 0.03,
+          "subsample": 1.0
+        },
+        "seed": 42,
+        "score": 0.832714,
+        "best_iteration": 596
+      },
+      {
+        "hyperparameters": {
+          "max_depth": 6,
+          "learning_rate": 0.05,
+          "subsample": 0.8
+        },
+        "seed": 42,
+        "score": 0.831782,
+        "best_iteration": 597
+      },
+      {
+        "hyperparameters": {
+          "max_depth": 6,
+          "learning_rate": 0.05,
+          "subsample": 1.0
+        },
+        "seed": 42,
+        "score": 0.83173,
+        "best_iteration": 592
+      },
+      {
+        "hyperparameters": {
+          "max_depth": 8,
+          "learning_rate": 0.03,
+          "subsample": 0.8
+        },
+        "seed": 42,
+        "score": 0.831279,
+        "best_iteration": 411
+      },
+      {
+        "hyperparameters": {
+          "max_depth": 8,
+          "learning_rate": 0.03,
+          "subsample": 1.0
+        },
+        "seed": 42,
+        "score": 0.829793,
+        "best_iteration": 431
+      },
+      {
+        "hyperparameters": {
+          "max_depth": 8,
+          "learning_rate": 0.05,
+          "subsample": 0.8
+        },
+        "seed": 42,
+        "score": 0.831052,
+        "best_iteration": 290
+      },
+      {
+        "hyperparameters": {
+          "max_depth": 8,
+          "learning_rate": 0.05,
+          "subsample": 1.0
+        },
+        "seed": 42,
+        "score": 0.831366,
+        "best_iteration": 201
+      }
+    ]
+  },
+  "event_001": {
+    "events": [
+      {
+        "event_code": "1860",
+        "turbine": "Kelmarsh 1",
+        "event_start_utc": "2019-02-24T16:46:28+00:00",
+        "detection_time_utc": "2019-02-10T20:50:00+00:00",
+        "matched": true,
+        "lead_time_minutes": 19910.0,
+        "window_days": 14,
+        "lead_time_quantisation_minutes": 10
+      }
+    ],
+    "detected": 1,
+    "missed": 0,
+    "false_alarm_episodes": 19326,
+    "inferential_allowed": false
+  },
+  "seasonal_coverage": {
+    "train_months": 25.889,
+    "train_calendar_months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+    ],
+    "test_calendar_months": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+    ],
+    "months_in_test_absent_from_train": [],
+    "ambient_range_train": [
+      -4.085,
+      37.58
+    ],
+    "ambient_range_test": [
+      -2.353,
+      43.989
+    ],
+    "warnings": [
+      "Test ambient temperature extends beyond the training range (train (-4.085, 37.58), test (-2.353, 43.989)); the model extrapolates"
+    ]
+  },
+  "healthy_state": {
+    "total": 847011,
+    "accepted": 656293,
+    "excluded": 190718,
+    "retention_pct": 77.4834,
+    "exclusion_counts": {
+      "alarm_period": 69320,
+      "below_minimum_active_power": 121398
+    },
+    "date_range_utc": [
+      "2016-05-03T09:40:00+00:00",
+      "2019-01-31T23:50:00+00:00"
+    ],
+    "turbines": [
+      "Kelmarsh 1",
+      "Kelmarsh 2",
+      "Kelmarsh 3",
+      "Kelmarsh 4",
+      "Kelmarsh 5",
+      "Kelmarsh 6"
+    ],
+    "findings": [],
+    "accounting_holds": true
+  },
+  "cleaning": {
+    "rows_removed": 41166,
+    "rows_after": 1587474,
+    "impossible_predictor_rows_dropped_total": 606,
+    "impossible_predictor_rows_dropped_by_partition": {
+      "train": 354,
+      "validation": 32,
+      "test": 220
+    }
+  },
+  "in_control": {
+    "n_points": 276304,
+    "n_exceedances": 44799,
+    "empirical_rate": 0.1621366321153512,
+    "theoretical_rate": 0.002699796063260207,
+    "inflation_ratio": 60.05514057960327,
+    "material_inflation_threshold": 2.0,
+    "materially_inflated": true
+  },
+  "n_diagnostics_in_event_window": 3590
+}
