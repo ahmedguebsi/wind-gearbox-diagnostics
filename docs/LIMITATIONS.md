@@ -597,5 +597,12 @@ Source:             M-20 empirical in-control characterization, experiment EXP-2
 Date discovered:    2026-08-17
 Description:        EWMA in-control false-alarm inflation: empirical rate 0.16214 vs i.i.d. theoretical 0.00270 (60.1x) on the healthy validation block — serial correlation invalidates the theoretical ARL (risk R4); control limits may require widening.
 Affected RQ(s):     RQ2 (detection thresholds; risk R4)
-Mitigation status:  OPEN — widen limits or justify empirically (PROJECT.md §23)
+Mitigation status:  OPEN — diagnosed and addressed by ADR-034 (PROPOSED).
+                    Measured mean lag-1 phi 0.7703 on the normalized residual
+                    predicts 2.07x variance inflation against 2.28x measured,
+                    implying 18.87% exceedance against the 16.21% recorded:
+                    serial correlation accounts for the whole discrepancy.
+                    ADR-034 rules for block-bootstrap empirical limits and
+                    rejects prewhitening. Reproduce with
+                    scripts/diagnose_residual_dependence.py.
 Source:             M-20 empirical in-control characterization, experiment EXP-20260817-001
