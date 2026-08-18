@@ -104,10 +104,12 @@ produces numbers without evidence and should not be run.
 | ID | Ablation | Supports | Status |
 |----|----------|----------|--------|
 | A1 | With / without `nacelle_temperature` | RQ1 predictor defence | **DONE** (ADR-027) |
-| A2 | Fleet-relative residuals, leave-one-out median | RQ2, LIM-023 | PROPOSED — must be registered before running |
+| A2 | Fleet-relative residuals, leave-one-out median | RQ2, LIM-023 | REGISTERED (ADR-029) — ready to run |
 | A3 | Upstream lag features vs none | RQ1 | PROPOSED |
 | A4 | Per-turbine vs pooled residual statistics | RQ2 | PROPOSED |
 | A5 | Coordination threshold 1-of-2 vs 2-of-2 at matched rates | RQ2 | **DONE** (matched-FPR sweep) |
+| A6 | Orthogonal common/differential modes vs raw channels | RQ2, RQ3 | PROPOSED (ADR-035) — registered, not run |
+| A7 | Block-bootstrap vs analytic EWMA control limits | RQ2 detection validity | PROPOSED (ADR-034) — registered, not run |
 
 ### Sensitivity (required)
 

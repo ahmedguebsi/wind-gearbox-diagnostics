@@ -591,3 +591,11 @@ Description:        EWMA in-control false-alarm inflation: empirical rate 0.1479
 Affected RQ(s):     RQ2 (detection thresholds; risk R4)
 Mitigation status:  OPEN — widen limits or justify empirically (PROJECT.md §23)
 Source:             M-20 empirical in-control characterization, experiment EXP-20260813-002
+
+## LIM-024 — EWMA in-control false-alarm inflation (EXP-20260817-001)
+
+Date discovered:    2026-08-17
+Description:        EWMA in-control false-alarm inflation: empirical rate 0.16214 vs i.i.d. theoretical 0.00270 (60.1x) on the healthy validation block — serial correlation invalidates the theoretical ARL (risk R4); control limits may require widening.
+Affected RQ(s):     RQ2 (detection thresholds; risk R4)
+Mitigation status:  OPEN — widen limits or justify empirically (PROJECT.md §23)
+Source:             M-20 empirical in-control characterization, experiment EXP-20260817-001

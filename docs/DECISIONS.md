@@ -1506,3 +1506,166 @@ If the verdict flips:
                    the pre-registered answer would not be defensible.
 Affected modules:  scripts/run_matched_fpr_sweep.py (BOUNDARY_GRID), ADR-016,
                    ADR-017(b), LIM-020, M-27.
+
+## ADR-034 — EWMA control limits calibrated by block bootstrap
+
+Status:            PROPOSED (2026-08-18) — awaiting author ruling
+Question:          The EWMA control limit is +/-k*sigma*sqrt(lambda/(2-lambda)).
+                   That factor is the steady-state standard deviation of a
+                   geometrically weighted sum of INDEPENDENT terms. The
+                   normalized residuals it is applied to are not independent.
+Evidence:          EXP-20260817-001, measured on the healthy validation
+                   residuals over strictly adjacent 10-minute pairs (naive
+                   shifting spans the exclusion gaps and understates the
+                   dependence):
+                     mean lag-1 phi               0.7703 (range 0.638-0.875,
+                                                  12 streams)
+                     inflation predicted, AR(1)   2.07x
+                     inflation measured on EWMA   2.28x
+                     exceedance implied by 2.28x  18.87%
+                     exceedance recorded          16.21%
+                     nominal rate the limits set  0.27%
+                   The arithmetic closes: residual autocorrelation accounts for
+                   the whole of the 60.06x inflation. AR(1) slightly
+                   UNDER-predicts because the memory is longer than one lag,
+                   consistent with the PHASE 10 EDA decorrelation median of 499
+                   samples (~83 h).
+Framing:           the inflation is not sixty independent defects. It is one
+                   scale parameter that is 2.28x too small. Gaussian tails are
+                   steep: at 3 sigma the two-sided tail is 0.27%, at
+                   3/2.28 = 1.32 sigma it is 18.8%. The apparent severity is
+                   tail steepness, not systemic breakage.
+Options:           (a) retain analytic limits and document the violation |
+                   (b) analytic correction by measured phi |
+                   (c) prewhiten the residual and chart the innovations |
+                   (d) block-bootstrap empirical limits.
+Decision:          (d) BLOCK-BOOTSTRAP EMPIRICAL LIMITS become the headline
+                   formulation. The healthy residual is resampled in blocks
+                   long enough to preserve its autocorrelation, the EWMA is run
+                   on each replicate, and the limit is the empirical quantile
+                   at the target false-alarm rate. (b) is retained as a
+                   reported cross-check. (c) is REJECTED.
+Why (c) is rejected:
+                   prewhitening fits an autoregression to the residual and
+                   charts its innovations. It is the standard SPC answer to
+                   autocorrelated data and it is wrong here: a slow fault ramp
+                   is precisely what such a filter learns to track and remove.
+                   It reinstates the Guard 8 failure mode — a model that
+                   follows its own target and suppresses the fault-driven
+                   signal — one stage downstream of the NBM, where the existing
+                   guards do not look. Gearbox degradation is a slow drift;
+                   whitening it away defeats the instrument.
+Justification:     PROJECT.md §25 requires false-alarm rates be measured on
+                   healthy periods and the experiment be fair. A limit derived
+                   from an assumption the data violates by a factor of 2.3
+                   satisfies neither. The bootstrap makes no distributional
+                   assumption, preserves the dependence by construction,
+                   introduces NO feedback path from the monitored series, and
+                   calibrates the rate by definition. The specification fixes
+                   the EWMA statistic and lambda; it does not fix how the limit
+                   is estimated, so this closes an underspecified point rather
+                   than departing from one.
+Binding conditions:
+                   (a) limits are estimated on healthy data NOT used for model
+                       selection — the ADR-030 inner holdout keeps VALIDATION
+                       clean for exactly this purpose.
+                   (b) block length comes from the existing
+                       block_length_from_autocorrelation and is reported per
+                       stream; a block count below 30 is flagged, not hidden.
+                   (c) NO FEEDBACK. The limit is a constant per stream, fixed
+                       before monitoring, never updated from the series it
+                       polices. This is what separates (d) from (c).
+Consequence:       every detection figure in the project is restated. ADR-025's
+                   operating points move again. The inflation ratio becomes
+                   ~1.0 BY CONSTRUCTION and therefore stops being a diagnostic
+                   — it must be replaced by a held-out healthy check, or it
+                   will report success tautologically. An unknown further share
+                   of the LIM-021 transfer gap is this artefact.
+Affected modules:  M-20/M-21 (ControlLimitSpec, ControlLimitFormulation,
+                   EwmaDetector), M-23 (matched_fpr), M-27, ADR-016, ADR-025,
+                   LIM-021, LIM-024.
+
+## ADR-035 — Two-channel residual monitored in orthogonal modes
+
+Status:            PROPOSED (2026-08-18) — awaiting author ruling
+Question:          RQ2 asks whether monitoring both thermal residual streams in
+                   coordination detects degradation that either alone would
+                   miss. That can only be true if the two streams carry
+                   different information.
+Evidence:          EXP-20260817-001, first measurement of the premise:
+                     cross-target Pearson, monitoring   0.9519
+                     cross-target Pearson, validation   0.9345
+                     per-turbine range                  0.942-0.968
+                     Spearman                           0.917
+                   Uniform across all six turbines and all three partitions,
+                   and the Spearman value rules out an outlier artefact. The
+                   schema already recorded 0.88-0.98 RAW correlation (ADR-012);
+                   modelling did not decorrelate the channels, because the
+                   unmodelled drivers act on both — the bearing sits in the
+                   oil, one heat path, two thermometers.
+Consequence for RQ2:
+                   at r = 0.95 the joint residual is a thin cigar on the
+                   diagonal. Given oil at +3 sigma, bearing is at 2.8 +/- 0.36
+                   sigma. The channels essentially never disagree, so 2-of-2
+                   and 1-of-2 coordination are the same rule. The negative RQ2
+                   verdict was never evidence about the coordination rule; it
+                   is evidence about the channels.
+Options:           (a) report the negative verdict and stop | (b) add an
+                   orthogonal-mode rotation as a registered arm | (c) drop one
+                   channel and monitor a single stream.
+Decision:          (b). The pre-registered raw-channel verdict STANDS AS
+                   COMPUTED and is reported FIRST. A common/differential
+                   rotation is added as a REGISTERED ARM, default OFF, with its
+                   expected behaviour recorded BEFORE execution: the
+                   differential mode carries little variance, is less
+                   autocorrelated than either raw channel, and its detection
+                   value is UNKNOWN on this dataset.
+Definition:        on per-channel standardized residuals,
+                     common       = (bearing + oil) / sqrt(2)
+                     differential = (bearing - oil) / sqrt(2)
+Measured (validation, EXP-20260817-001):
+                     corr(common, differential)   3.07e-16 (machine zero)
+                     sd(common)                   1.3909 = sqrt(1+r) exactly
+                     sd(differential)             0.2559 = sqrt(1-r) exactly
+                     variance share               96.7% / 3.3%
+                     lag-1 phi                    0.775 / 0.593
+Justification:     the rotation manufactures the independence coordination
+                   requires — exactly, not approximately. Each mode also
+                   carries a physical reading: common mode high means the whole
+                   gearbox is hot (cooling circuit, oil condition, load);
+                   differential mode high means the bearing is hot RELATIVE TO
+                   ITS OWN OIL BATH, which is the bearing-specific signature
+                   RQ2 was reaching for and the only one an FMEA rule can
+                   discriminate. The differential mode is also better behaved
+                   for control charting (phi 0.59 against 0.78). Both modes are
+                   linear combinations of exogenous-only residuals, so Guard 8
+                   and LOCKED-05 are untouched and no new data is required.
+Why an arm, not a swap:
+                   the collinearity was discovered FROM RESULTS. Replacing the
+                   monitored quantity in response and reporting only the new
+                   pipeline would be post-hoc pipeline selection — the practice
+                   the ADR-016 pre-registration exists to prevent. Reported as
+                   a declared arm alongside the raw-channel verdict, the
+                   comparison itself becomes the contribution.
+Binding conditions:
+                   (a) standardization uses TRAINING healthy statistics only;
+                       monitoring-period statistics never enter.
+                   (b) the pre-registered raw-channel verdict is reported
+                       first, always.
+                   (c) the differential mode's DETECTION value is declared
+                       UNTESTED and must be reported as such: it carries 3.3%
+                       of the variance (sd ~0.53 degC), and with one contested
+                       event this dataset cannot establish whether it responds
+                       to real faults. Its FALSE-ALARM behaviour CAN be
+                       characterised, and that is what this arm measures.
+                   (d) the rotation is applied AFTER residual normalization,
+                       never before — rotating unnormalized channels mixes two
+                       different scales and the orthogonality does not hold.
+Scope note:        beyond the original PROJECT.md scope. §24 requires
+                   coordinated residuals; nothing in the specification
+                   addresses collinearity between them. Recorded as an
+                   extension, justified by an empirical finding the project
+                   itself registered.
+Affected modules:  NEW app/residuals/modes.py, M-19 (normalization ordering),
+                   M-30 (runner wiring, metrics.residual_diagnostics), ADR-016,
+                   ADR-027, LIM-020, RQ2 and RQ3 chapters.
