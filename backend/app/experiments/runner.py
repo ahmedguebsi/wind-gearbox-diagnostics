@@ -202,12 +202,22 @@ def assert_reproducible_code_state(schema_version: str, *, allow_dirty: bool = F
     if allow_dirty:
         return
     stamp = capture_version_stamp(schema_version=schema_version)
-    if stamp.git_dirty:
+    if stamp.git_tracked_dirty:
         raise SystemExit(
-            "REFUSING TO RUN: the working tree is dirty, so this run could not "
-            "be reproduced from the commit its metadata would record "
-            f"({stamp.git_commit[:10]}; PROJECT.md §15). Commit or stash the "
-            "changes, or pass --allow-dirty for an explicitly exploratory run."
+            "REFUSING TO RUN: tracked files have uncommitted changes, so this "
+            "run could not be reproduced from the commit its metadata would "
+            f"record ({stamp.git_commit[:10]}; PROJECT.md §15). Commit or stash "
+            "them, or pass --allow-dirty for an explicitly exploratory run."
+        )
+    if stamp.git_untracked_files:
+        # Not a blocker: untracked files do not change what the recorded commit
+        # says the code is. Reported so the run's provenance is complete and the
+        # reader can judge — on this repository they are the author's documents
+        # and the governing specification, which live outside the repo by design.
+        _logger.warning(
+            "%d untracked file(s) present; the code state is still fully described by commit %s",
+            stamp.git_untracked_files,
+            stamp.git_commit[:10],
         )
 
 

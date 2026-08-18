@@ -41,6 +41,20 @@ class VersionStamp(BaseModel):
     git_commit: str
     git_dirty: bool
     library_versions: dict[str, str]
+    #: ADR-044 refinement. ``git_dirty`` is true for ANY working-tree
+    #: difference, untracked files included, which conflates two very
+    #: different things:
+    #:
+    #: - UNCOMMITTED MODIFICATIONS to tracked files mean the recorded commit
+    #:   does not describe the code that ran. That voids reproducibility.
+    #: - UNTRACKED files usually do not. On this repository they are the
+    #:   author's own documents and the governing specification, which the
+    #:   README states live outside the repository by design.
+    #:
+    #: Both are recorded; only the first blocks a citable run. Defaults keep
+    #: pre-ADR-044 stamps loadable (the ADR-039 lesson).
+    git_tracked_dirty: bool = False
+    git_untracked_files: int = 0
 
 
 def _git(args: list[str], cwd: Path) -> str:
@@ -78,12 +92,15 @@ def capture_version_stamp(*, schema_version: str, repo_root: Path | None = None)
     """
     cwd = repo_root if repo_root is not None else Path.cwd()
     commit = _git(["rev-parse", "HEAD"], cwd)
-    dirty = _git(["status", "--porcelain"], cwd) != ""
+    porcelain = [line for line in _git(["status", "--porcelain"], cwd).splitlines() if line.strip()]
+    untracked = [line for line in porcelain if line.startswith("??")]
     return VersionStamp(
         app_version=APP_VERSION,
         schema_version=schema_version,
         python_version=sys.version.split()[0],
         git_commit=commit,
-        git_dirty=dirty,
+        git_dirty=bool(porcelain),
+        git_tracked_dirty=len(porcelain) > len(untracked),
+        git_untracked_files=len(untracked),
         library_versions=capture_library_versions(),
     )
