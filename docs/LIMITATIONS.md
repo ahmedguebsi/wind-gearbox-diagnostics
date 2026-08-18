@@ -942,3 +942,92 @@ Mitigation status:  ACCEPTED as a finding. Chapter 4 reports the ablation;
                     multi-target modelling.
 Source:             `artifacts/EXP-20260817-001/evaluation/robustness_suite.json`,
                     arm `multi_output`, 2026-08-18; ADR-046.
+
+## LIM-033 — EWMA in-control false-alarm inflation (EXP-20260818-001)
+
+Date discovered:    2026-08-18
+Description:        EWMA in-control false-alarm inflation: empirical rate 0.16214 vs i.i.d. theoretical 0.00270 (60.1x) on the healthy validation block — serial correlation invalidates the theoretical ARL (risk R4); control limits may require widening.
+Affected RQ(s):     RQ2 (detection thresholds; risk R4)
+Mitigation status:  OPEN — widen limits or justify empirically (PROJECT.md §23)
+Source:             M-20 empirical in-control characterization, experiment EXP-20260818-001
+
+## LIM-034 — Half the monitoring residual variance comes from 18% of rows the model never trained on
+
+Date discovered:    2026-08-18
+Description:        FINDING, and the quantitative root cause behind LIM-028,
+                    LIM-029, LIM-031 and the direction result of LIM-026. It is
+                    the first thing the PROJECT.md §20 condition diagnostics
+                    produced when they were finally run (ADR-045), on
+                    EXP-20260818-001.
+
+                    Thesis-model residual on the unfiltered monitoring stream,
+                    bearing target, by operating band:
+
+                      band                  rows   share    mean    sigma  |r|>10C
+                      negative power      86,007   11.6%  -16.96   10.85    71.6%
+                      0-50 kW             46,899    6.3%   -2.21    5.29     8.8%
+                      50-250 kW          157,155   21.2%   -0.14    3.14     1.2%
+                      250-1000 kW        267,662   36.1%   -0.14    1.98     0.2%
+                      >1000 kW           182,740   24.7%   +0.03    1.27     0.0%
+
+                    Two facts follow directly:
+                    (a) ABOVE the 50 kW healthy-state floor — the regime the
+                        NBM was fitted on — the model is essentially unbiased
+                        and tight: mean -0.09 degC, sigma 2.18, and 0.0% of
+                        rows beyond |10 degC| at rated power.
+                    (b) BELOW the floor the model is catastrophically wrong:
+                        mean -11.75 degC overall, and on negative-power rows
+                        71.6% of residuals exceed |10 degC|.
+
+                    Those below-floor rows are 17.9% of the detection stream
+                    and carry 50.4% OF THE TOTAL RESIDUAL VARIANCE.
+
+Explains, in one measurement:
+                    - the 60x in-control false-alarm inflation (LIM-024): the
+                      residual distribution the control limits are asked to
+                      police is a mixture of a tight trained-regime component
+                      and a wide untrained-regime component;
+                    - the 19,326 false-alarm episodes;
+                    - why LOW exceedances outnumber HIGH by ~3.5:1 — the
+                      below-floor mean is -11.75 degC, so the untrained regime
+                      produces large NEGATIVE residuals;
+                    - why the single EVENT-001 match is direction -1 (LIM-026):
+                      cold-side excursions are what this pipeline mostly emits;
+                    - why the ambient slice shows worst error at the COLD end
+                      (sigma 13.6 degC near 1 degC ambient, best above 20 degC)
+                      rather than at the warm end LIM-013 anticipated — cold
+                      ambient co-occurs with parked and idling machines;
+                    - why the B3 fleet-median-only baseline competes (LIM-031):
+                      it has no trained/untrained regime distinction to violate;
+                    - the "step" component of LIM-029.
+
+Consequence:        the NBM is NOT poor. It is good where it was trained and is
+                    being asked a question it was never fitted to answer on
+                    nearly a fifth of the stream. Every false-alarm figure in
+                    this project is therefore dominated by regime mismatch
+                    rather than by detector behaviour, and no false-alarm rate
+                    should be read as a property of the EWMA design until this
+                    is separated.
+Design tension:     PROJECT.md §13 builds the healthy population above a 50 kW
+                    floor; PROJECT.md §14 requires the TEST partition to stay
+                    unfiltered because anomalous rows there are the signal.
+                    Neither section anticipates the other, and this measurement
+                    is the size of the gap between them.
+Affected RQ(s):     RQ1 (what the unfiltered-period metrics measure), RQ2 (every
+                    false-alarm and detection claim), RQ3 (alert volume and the
+                    direction of what is alerted on)
+Mitigation status:  OPEN, and now cheap to act on. Three candidates, all
+                    methodological and therefore reserved to the author:
+                    (a) report detection results SPLIT by in-regime and
+                        out-of-regime rows — no new modelling, immediate;
+                    (b) gate detection on operating state, which PROJECT.md §14
+                        arguably forbids and which therefore needs a ruling;
+                    (c) model the parked/idling regime explicitly rather than
+                        excluding it, which is a scope extension.
+                    (a) is recommended first: it costs one analysis pass and
+                    would let every RQ2 number be restated as a property of the
+                    detector rather than of the population it was pointed at.
+Source:             `artifacts/EXP-20260818-001/evaluation/condition_diagnostics.json`
+                    and `plots/*_residual_vs_active_power.png` (ADR-045); band
+                    aggregation of `residuals/test.parquet` joined to
+                    `evaluation/conditions.parquet`, 2026-08-18.
