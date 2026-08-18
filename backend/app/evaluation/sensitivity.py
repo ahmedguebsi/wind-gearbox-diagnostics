@@ -48,6 +48,10 @@ DEFAULT_GRIDS: dict[str, tuple[Any, ...]] = {
     "detection.ewma_lambda": (0.1, 0.2, 0.3),
     "detection.control_limit_sigma": (2.0, 3.0, 4.0),
     "detection.persistence_min_samples": (2, 3, 6),
+    #: ADR-042: both branches exist as configuration so the closure evidence
+    #: — what the in-control rate does when the recursion stops crossing
+    #: exclusion gaps — can actually be produced.
+    "detection.gap_handling": ("continuous", "reset"),
     "evaluation.event_match_window_days": (7, 14, 30),
     "validation.step_change_window_samples": (72, 144, 288),
     "validation.step_change_min_magnitude_c": (2.5, 5.0, 10.0),
@@ -85,18 +89,55 @@ def override_parameter(config: AppConfig, dotted: str, value: Any) -> AppConfig:
     return AppConfig.model_validate(payload)
 
 
+#: Sweep status labels. NOT_APPLICABLE is the one that had to be added: a
+#: parameter with no lever on the run reports identical outcomes at every
+#: value, which is indistinguishable from genuine insensitivity unless it is
+#: said out loud (ADR-040).
+STATUS_NOT_APPLICABLE = "NOT_APPLICABLE"
+STATUS_FLIPS = "FLIPS"
+STATUS_STABLE = "STABLE"
+
+
 @dataclass(frozen=True)
 class ParameterSweep:
-    """One parameter's sweep: values, outcomes, and conclusion labels."""
+    """One parameter's sweep: values, outcomes, and conclusion labels.
+
+    ``inapplicable_reason`` is set when the parameter cannot affect this run
+    at all. On the Kelmarsh configuration five of the thirteen provisional
+    parameters are in that position: no caller supplies fault or maintenance
+    exclusion windows, so ``fault_pre_exclusion_days`` and
+    ``maintenance_post_exclusion_days`` have nothing to act on; and
+    ``exclude_step_changes`` is False at the base configuration (ADR-018), so
+    the three step-change parameters are inert around it. Sweeping them
+    produced identical outcomes and the suite labelled them STABLE — reading
+    as robustness evidence for parameters that were merely switched off.
+    """
 
     parameter: str
     values: tuple[Any, ...]
     outcomes: tuple[dict[str, Any], ...]
     conclusions: tuple[str, ...]
+    #: Why this parameter has no lever on the run, or None when it does.
+    inapplicable_reason: str | None = None
+
+    @property
+    def applicable(self) -> bool:
+        return self.inapplicable_reason is None
 
     @property
     def conclusion_flips(self) -> bool:
-        return len(set(self.conclusions)) > 1
+        """True only for a parameter that CAN move the outcome and does.
+
+        An inapplicable parameter cannot flip a conclusion, and must not be
+        able to raise a false alarm in the register either.
+        """
+        return self.applicable and len(set(self.conclusions)) > 1
+
+    @property
+    def status(self) -> str:
+        if not self.applicable:
+            return STATUS_NOT_APPLICABLE
+        return STATUS_FLIPS if self.conclusion_flips else STATUS_STABLE
 
     def outcome_range(self, metric: str) -> float:
         numbers = [float(outcome[metric]) for outcome in self.outcomes]
@@ -109,6 +150,9 @@ class ParameterSweep:
             "outcomes": list(self.outcomes),
             "conclusions": list(self.conclusions),
             "conclusion_flips": self.conclusion_flips,
+            "status": self.status,
+            "applicable": self.applicable,
+            "inapplicable_reason": self.inapplicable_reason,
         }
 
 
@@ -121,10 +165,27 @@ class SensitivityReport:
     def flipping_parameters(self) -> tuple[str, ...]:
         return tuple(s.parameter for s in self.sweeps if s.conclusion_flips)
 
+    def inapplicable_parameters(self) -> tuple[str, ...]:
+        """Parameters with no lever on this run — NOT evidence of stability."""
+        return tuple(s.parameter for s in self.sweeps if not s.applicable)
+
     def tornado(self, metric: str) -> pd.DataFrame:
         """Tornado-style summary: outcome range per parameter, widest first
-        — which parameters materially change conclusions (PROJECT.md §27.3)."""
-        rows = [{"parameter": s.parameter, "range": s.outcome_range(metric)} for s in self.sweeps]
+        — which parameters materially change conclusions (PROJECT.md §27.3).
+
+        Carries the ``status`` column so a zero-range row cannot be read as
+        robustness without seeing whether the parameter was applicable at all
+        (ADR-040).
+        """
+        rows = [
+            {
+                "parameter": s.parameter,
+                "range": s.outcome_range(metric),
+                "status": s.status,
+                "inapplicable_reason": s.inapplicable_reason,
+            }
+            for s in self.sweeps
+        ]
         return pd.DataFrame(rows).sort_values("range", ascending=False).reset_index(drop=True)
 
     def append_flips(self, limitations_path: Path, *, source: str) -> list[str]:
@@ -160,7 +221,19 @@ class SensitivityReport:
         return {
             "sweeps": [s.as_dict() for s in self.sweeps],
             "flipping_parameters": list(self.flipping_parameters()),
+            "inapplicable_parameters": list(self.inapplicable_parameters()),
+            "note": (
+                "A parameter listed under inapplicable_parameters has no lever "
+                "on this run and its identical outcomes are NOT evidence that "
+                "the conclusion is robust to it (ADR-040)."
+            ),
         }
+
+
+#: A predicate returning the reason a parameter cannot affect a run, or None
+#: when it can. Evaluated against the CONFIGURATION BEING SWEPT, so a
+#: parameter gated by another config field is judged per value.
+ApplicabilityCheck = Callable[[AppConfig], str | None]
 
 
 def run_sensitivity(
@@ -168,32 +241,52 @@ def run_sensitivity(
     runner: Callable[[AppConfig], dict[str, Any]],
     conclusion: Callable[[dict[str, Any]], str],
     grids: Mapping[str, Sequence[Any]] | None = None,
+    applicability: Mapping[str, ApplicabilityCheck] | None = None,
 ) -> SensitivityReport:
     """Sweep every provisional parameter, one at a time, around the base.
 
     ``runner`` must be seeded and deterministic (it re-runs the pipeline per
     configuration); ``conclusion`` maps an outcome to the stated conclusion
     label whose stability is being tested (e.g. the ADR-016 criterion).
+
+    ``applicability`` declares, per parameter, whether it can affect this run
+    at all. A parameter inapplicable at EVERY swept value is labelled
+    NOT_APPLICABLE and is excluded from the conclusion-flip register: its
+    identical outcomes say nothing about robustness (ADR-040). Applicability
+    is a property of the run's INPUTS as well as its config — no caller
+    supplies fault or maintenance windows on the Kelmarsh holdings — so the
+    checks are supplied by the caller that owns those inputs, not inferred
+    here.
     """
     grids = grids if grids is not None else DEFAULT_GRIDS
+    checks = dict(applicability or {})
     verify_grid_coverage(grids)
     sweeps: list[ParameterSweep] = []
     for parameter in sorted(grids):
         values = tuple(grids[parameter])
         if not values:
             raise ConfigError("Empty sensitivity grid", parameter=parameter)
+        check = checks.get(parameter)
         outcomes: list[dict[str, Any]] = []
         labels: list[str] = []
+        reasons: list[str | None] = []
         for value in values:
-            outcome = runner(override_parameter(base_config, parameter, value))
+            config = override_parameter(base_config, parameter, value)
+            reasons.append(check(config) if check is not None else None)
+            outcome = runner(config)
             outcomes.append(outcome)
             labels.append(conclusion(outcome))
+        # Inapplicable only when NO swept value gives the parameter a lever.
+        # Sweeping `exclude_step_changes` False->True is exactly the case that
+        # must stay applicable: one of its values turns the machinery on.
+        inapplicable = reasons[0] if all(r is not None for r in reasons) else None
         sweeps.append(
             ParameterSweep(
                 parameter=parameter,
                 values=values,
                 outcomes=tuple(outcomes),
                 conclusions=tuple(labels),
+                inapplicable_reason=inapplicable,
             )
         )
     return SensitivityReport(sweeps=tuple(sweeps))

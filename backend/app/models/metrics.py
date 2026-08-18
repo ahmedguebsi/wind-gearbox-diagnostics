@@ -22,10 +22,35 @@ import pandas as pd
 
 from app.core.errors import ConfigError
 
+#: The project's single error convention: ``residual = actual - predicted``
+#: (PROJECT.md §21). Bias is the mean residual, so a POSITIVE bias means the
+#: model UNDER-predicts. Stated as a named constant because it was previously
+#: not stated: this module computed mean(predicted - actual) while the
+#: bootstrap path in the run script computed mean(actual - predicted), and the
+#: two shipped opposite signs for the same quantity in one experiment's
+#: artifacts (see ADR-036). Anything computing an error signal derives it from
+#: :func:`residual` so a second convention cannot re-enter.
+ERROR_CONVENTION = "residual = actual - predicted (PROJECT.md §21)"
+
+
+def residual(actual: np.ndarray, predicted: np.ndarray) -> np.ndarray:
+    """The project's error signal: ``actual - predicted`` (§21).
+
+    THE single definition. The residual engine, the metrics layer and the
+    bootstrap all route through it, so no code path can silently adopt the
+    opposite sign.
+    """
+    difference: np.ndarray = np.asarray(actual, dtype=float) - np.asarray(predicted, dtype=float)
+    return difference
+
 
 @dataclass(frozen=True)
 class MetricSet:
-    """Exactly {rmse, mae, r2, bias} — no MAPE field exists (LOCKED via §19)."""
+    """Exactly {rmse, mae, r2, bias} — no MAPE field exists (LOCKED via §19).
+
+    ``bias`` is the mean RESIDUAL (:data:`ERROR_CONVENTION`): positive means
+    the model under-predicts the target.
+    """
 
     rmse: float
     mae: float
@@ -37,7 +62,11 @@ class MetricSet:
 
 
 def compute_metrics(actual: pd.Series, predicted: pd.Series) -> MetricSet:
-    """RMSE/MAE/R²/bias on one target. Bias is mean(predicted - actual)."""
+    """RMSE/MAE/R²/bias on one target.
+
+    Bias is mean(actual - predicted) — the mean residual, per
+    :data:`ERROR_CONVENTION`. RMSE and MAE are sign-invariant and unaffected.
+    """
     if len(actual) != len(predicted):
         raise ConfigError(
             "Actual and predicted lengths differ", actual=len(actual), predicted=len(predicted)
@@ -45,9 +74,8 @@ def compute_metrics(actual: pd.Series, predicted: pd.Series) -> MetricSet:
     if len(actual) == 0:
         raise ConfigError("Cannot compute metrics on empty series")
     a = actual.to_numpy(dtype=float)
-    p = predicted.to_numpy(dtype=float)
-    error = p - a
-    ss_residual = float(np.sum((a - p) ** 2))
+    error = residual(a, predicted.to_numpy(dtype=float))
+    ss_residual = float(np.sum(error**2))
     ss_total = float(np.sum((a - np.mean(a)) ** 2))
     r2 = 1.0 - ss_residual / ss_total if ss_total > 0.0 else float("nan")
     return MetricSet(

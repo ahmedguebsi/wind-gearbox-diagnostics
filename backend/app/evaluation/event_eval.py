@@ -17,7 +17,7 @@ timestamps and their difference.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import pandas as pd
@@ -86,7 +86,18 @@ def quantised_lead_minutes(event_start: pd.Timestamp, detection_time: pd.Timesta
 @dataclass(frozen=True)
 class EventMatch:
     """One event's matching outcome — the ADR-016 secondary criterion's two
-    timestamps and their difference, as facts."""
+    timestamps and their difference, as facts.
+
+    ``direction`` and ``window_direction_census`` exist because the matching
+    rule is DIRECTION-AGNOSTIC (ADR-017 fixed it that way and it is not
+    revised here), while thermal fault mechanisms are not. On EVENT-001 —
+    code 1860, a choked gear-oil filter, whose physical signature is a
+    temperature RISE — 72 of the 82 persistent detections inside the match
+    window were abnormally LOW, including the matched one. Reporting the
+    lead time without the direction states a detection the physics does not
+    support. The verdict is unchanged; what changes is that the reader can
+    see what was matched (ADR-037).
+    """
 
     event_code: str | None
     turbine: str
@@ -96,6 +107,12 @@ class EventMatch:
     lead_time_minutes: float | None
     window_days: int
     grid_minutes: int = GRID_MINUTES
+    #: Direction of the MATCHED detection: +1 abnormally high, -1 abnormally
+    #: low, None when unmatched.
+    direction: int | None = None
+    #: Direction counts over every persistent detection in the match window,
+    #: so a match cannot be read without its context.
+    window_direction_census: dict[str, int] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -109,7 +126,13 @@ class EventMatch:
             "lead_time_minutes": self.lead_time_minutes,
             "window_days": self.window_days,
             "lead_time_quantisation_minutes": self.grid_minutes,
+            "direction": self.direction,
+            "direction_label": _DIRECTION_LABELS.get(self.direction, "none"),
+            "window_direction_census": dict(self.window_direction_census),
         }
+
+
+_DIRECTION_LABELS: dict[int | None, str] = {1: "high", -1: "low", 0: "normal", None: "none"}
 
 
 def match_event(
@@ -117,15 +140,33 @@ def match_event(
     detections: list[PersistentDetection],
     *,
     window_days: int,
+    expected_direction: int | None = None,
 ) -> EventMatch:
-    """ADR-017(a): first persistent exceedance within the pre-event window."""
+    """ADR-017(a): first persistent exceedance within the pre-event window.
+
+    ``expected_direction`` defaults to None — the ADR-017 rule, unchanged, so
+    every pre-registered result is reproduced exactly. Supplying +1 or -1
+    restricts matching to detections of that sign, which is what a
+    mechanism-aware evaluation requires; it is offered as an option for the
+    author to register, never applied by default (PROJECT.md §34).
+    """
     window_start = event.start_utc - pd.Timedelta(days=window_days)
     in_window = [
         d
         for d in detections
         if d.turbine == event.turbine and window_start <= d.first_timestamp_utc <= event.start_utc
     ]
-    if not in_window:
+    census = {
+        "high": sum(1 for d in in_window if d.direction > 0),
+        "low": sum(1 for d in in_window if d.direction < 0),
+        "total": len(in_window),
+    }
+    eligible = (
+        in_window
+        if expected_direction is None
+        else [d for d in in_window if d.direction == expected_direction]
+    )
+    if not eligible:
         return EventMatch(
             event_code=event.code,
             turbine=event.turbine,
@@ -134,16 +175,20 @@ def match_event(
             matched=False,
             lead_time_minutes=None,
             window_days=window_days,
+            direction=None,
+            window_direction_census=census,
         )
-    first = min(d.first_timestamp_utc for d in in_window)
+    first = min(eligible, key=lambda d: d.first_timestamp_utc)
     return EventMatch(
         event_code=event.code,
         turbine=event.turbine,
         event_start_utc=event.start_utc,
-        detection_time_utc=first,
+        detection_time_utc=first.first_timestamp_utc,
         matched=True,
-        lead_time_minutes=quantised_lead_minutes(event.start_utc, first),
+        lead_time_minutes=quantised_lead_minutes(event.start_utc, first.first_timestamp_utc),
         window_days=window_days,
+        direction=first.direction,
+        window_direction_census=census,
     )
 
 
@@ -159,6 +204,11 @@ class EvaluationResult:
     matches: tuple[EventMatch, ...]
     false_alarm_episodes: int
     inferential_allowed: bool
+    #: Direction breakdown of the false-alarm episodes. A detector whose
+    #: false alarms are predominantly LOW is responding to something other
+    #: than the heat-generating mechanisms the FMEA layer describes, and that
+    #: is not visible from a single episode count (ADR-037).
+    false_alarm_direction_census: dict[str, int] = field(default_factory=dict)
 
     @property
     def n_events(self) -> int:
@@ -188,6 +238,7 @@ class EvaluationResult:
             "detected": self.detected,
             "missed": self.missed,
             "false_alarm_episodes": self.false_alarm_episodes,
+            "false_alarm_direction_census": dict(self.false_alarm_direction_census),
             "inferential_allowed": self.inferential_allowed,
         }
         if self.inferential_allowed:
@@ -202,17 +253,24 @@ def evaluate_events(
     window_days: int,
     min_samples: int,
     min_events_for_inferential: int = 2,
+    expected_direction: int | None = None,
 ) -> EvaluationResult:
     """Event-level evaluation under the ADR-017 matching rule.
 
     False-alarm episodes are persistent detections whose first timestamp
     falls outside every event's [window_start, event_end] envelope (an
     endless event's envelope closes at its start).
+
+    ``expected_direction`` is passed through to :func:`match_event` and
+    defaults to None (the unmodified ADR-017 rule).
     """
     if not events:
         raise ConfigError("No events supplied; event evaluation is undefined")
     persistent = persistent_detections(detections, min_samples=min_samples)
-    matches = tuple(match_event(e, persistent, window_days=window_days) for e in events)
+    matches = tuple(
+        match_event(e, persistent, window_days=window_days, expected_direction=expected_direction)
+        for e in events
+    )
 
     envelopes = [
         (
@@ -222,16 +280,21 @@ def evaluate_events(
         )
         for e in events
     ]
-    false_alarms = sum(
-        1
+    outside = [
+        d
         for d in persistent
         if not any(
             d.turbine == turbine and start <= d.first_timestamp_utc <= end
             for turbine, start, end in envelopes
         )
-    )
+    ]
     return EvaluationResult(
         matches=matches,
-        false_alarm_episodes=false_alarms,
+        false_alarm_episodes=len(outside),
         inferential_allowed=len(events) >= min_events_for_inferential,
+        false_alarm_direction_census={
+            "high": sum(1 for d in outside if d.direction > 0),
+            "low": sum(1 for d in outside if d.direction < 0),
+            "total": len(outside),
+        },
     )

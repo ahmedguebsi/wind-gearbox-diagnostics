@@ -28,8 +28,8 @@ from app.residuals.engine import (
     ResidualFrame,
 )
 from app.residuals.fleet import (
-    _leave_one_out_median,
     fleet_relative_residuals,
+    leave_one_out_median,
 )
 
 OIL = "gearbox_oil_temperature"
@@ -67,7 +67,7 @@ class TestLeaveOneOutMedian:
         """The whole point: a turbine must never contribute to its own
         reference, or its excursion attenuates itself."""
         values = np.array([[100.0, 1.0, 2.0, 3.0]])
-        out = _leave_one_out_median(values, min_peers=2)
+        out = leave_one_out_median(values, min_peers=2)
         # Column 0's reference is median(1, 2, 3) = 2, not median of all four.
         assert out[0, 0] == pytest.approx(2.0)
         # Column 1's reference is median(100, 2, 3) = 3.
@@ -75,13 +75,13 @@ class TestLeaveOneOutMedian:
 
     def test_nan_when_too_few_peers(self):
         values = np.array([[1.0, np.nan, np.nan]])
-        out = _leave_one_out_median(values, min_peers=2)
+        out = leave_one_out_median(values, min_peers=2)
         assert np.isnan(out[0, 0])
 
     def test_peers_below_threshold_are_not_used(self):
         values = np.array([[1.0, 5.0, np.nan]])
-        strict = _leave_one_out_median(values, min_peers=2)
-        lenient = _leave_one_out_median(values, min_peers=1)
+        strict = leave_one_out_median(values, min_peers=2)
+        lenient = leave_one_out_median(values, min_peers=1)
         assert np.isnan(strict[0, 0])
         assert lenient[0, 0] == pytest.approx(5.0)
 

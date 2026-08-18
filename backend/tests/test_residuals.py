@@ -31,6 +31,7 @@ from app.residuals.ewma import (
     ControlLimitSpec,
     DetectionSeries,
     EwmaDetector,
+    GapHandling,
     ewma_recursion,
 )
 from app.residuals.normalization import (
@@ -325,3 +326,86 @@ class TestEwma:
             EwmaDetector(0.0, ControlLimitSpec())
         with pytest.raises(ConfigError):
             EwmaDetector(1.5, ControlLimitSpec())
+
+
+def _gapped_normalized_frame(values: np.ndarray, gap_after: int) -> ResidualFrame:
+    """Two contiguous segments separated by a one-day gap — the shape
+    healthy-state exclusion produces when it removes an alarm window from the
+    middle of a stream."""
+    early = pd.date_range("2019-01-01", periods=gap_after, freq="10min", tz="UTC")
+    late = pd.date_range("2019-01-02", periods=len(values) - gap_after, freq="10min", tz="UTC")
+    stamps = early.append(late)
+    frame = pd.DataFrame(
+        {
+            "timestamp": stamps,
+            "turbine_id": "T1",
+            "target": OIL,
+            "actual": values,
+            "prediction": 0.0,
+            RAW_RESIDUAL_COLUMN: values,
+            NORMALIZED_RESIDUAL_COLUMN: np.nan,
+        }
+    )
+    return ResidualFrame(frame).with_normalized(pd.Series(values))
+
+
+class TestGapHandling:
+    """ADR-042: the EWMA recursion carried its memory across exclusion gaps as
+    though the rows were adjacent, and ``np.nan_to_num`` charted an absent
+    residual as exactly normal. Both branches now exist; CONTINUOUS stays the
+    default so no stored result moves without an author ruling.
+    """
+
+    @staticmethod
+    def _detector(gap_handling: GapHandling) -> EwmaDetector:
+        rng = np.random.default_rng(0)
+        healthy = _normalized_frame({OIL: rng.standard_normal(400)})
+        detector = EwmaDetector(
+            0.2, ControlLimitSpec(sigma_multiplier=3.0), gap_handling=gap_handling
+        )
+        detector.fit_control_limits(healthy, PartitionRef.HEALTHY_TRAINING)
+        return detector
+
+    @staticmethod
+    def _excursion() -> ResidualFrame:
+        # Sustained excursion in segment one, nothing in segment two.
+        return _gapped_normalized_frame(
+            np.concatenate([np.full(20, 5.0), np.zeros(20)]), gap_after=20
+        )
+
+    def test_continuous_carries_memory_across_the_gap(self):
+        series, _ = self._detector(GapHandling.CONTINUOUS).detect(self._excursion())
+        assert series[0].values.to_numpy()[20] > 1.0
+
+    def test_reset_restarts_the_recursion_at_the_gap(self):
+        series, _ = self._detector(GapHandling.RESET).detect(self._excursion())
+        assert series[0].values.to_numpy()[20] == pytest.approx(0.0)
+
+    def test_gap_census_is_reported_on_the_default_branch(self):
+        """The size of the open question must be visible on a CONTINUOUS run,
+        not only on one that already decided to act on it."""
+        detector = self._detector(GapHandling.CONTINUOUS)
+        detector.detect(self._excursion())
+        census = detector.gap_census()
+        assert census["gap_handling"] == "continuous"
+        assert census["n_discontinuities"] == 1
+        assert census["n_samples"] == 40
+        assert census["n_segments"] == 2
+
+    def test_contiguous_stream_makes_both_branches_identical(self):
+        """The monitoring partition is unfiltered and contiguous, so the
+        branches must agree there. That is why this never surfaced in the
+        detection results — only in the healthy-block calibration."""
+        values = np.concatenate([np.full(20, 5.0), np.zeros(20)])
+        frame = _gapped_normalized_frame(values, gap_after=40)  # no gap
+        continuous = self._detector(GapHandling.CONTINUOUS)
+        reset = self._detector(GapHandling.RESET)
+        a, _ = continuous.detect(frame)
+        b, _ = reset.detect(frame)
+        assert continuous.gap_census()["n_discontinuities"] == 0
+        assert np.allclose(a[0].values.to_numpy(), b[0].values.to_numpy())
+
+    def test_in_control_report_carries_the_gap_census(self):
+        detector = self._detector(GapHandling.CONTINUOUS)
+        report = detector.characterize_in_control(self._excursion())
+        assert report.as_dict()["gap_census"]["n_discontinuities"] == 1

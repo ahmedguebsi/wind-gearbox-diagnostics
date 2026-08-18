@@ -293,6 +293,16 @@ class DetectionConfig(StrictModel):
     persistence_min_samples: int = provisional_field(
         3, "Consecutive exceedance samples for a persistent detection", ge=2
     )
+    #: ADR-042 (PROPOSED): whether the EWMA recursion carries its memory
+    #: across discontinuities. ``continuous`` reproduces every stored result
+    #: and stays the default until the author rules; ``reset`` restarts the
+    #: recursion at each gap. The healthy partitions supplying the in-control
+    #: characterisation and the control limits are gap-filled by exclusion, so
+    #: this is a live question about those numbers specifically. Provisional-
+    #: marked so the sensitivity suite measures it rather than assuming it.
+    gap_handling: Literal["continuous", "reset"] = provisional_field(
+        "continuous", "EWMA behaviour at stream discontinuities (ADR-042)"
+    )
 
 
 class EvaluationConfig(StrictModel):
@@ -306,6 +316,15 @@ class EvaluationConfig(StrictModel):
     #: The pre-committed Phase 0.5 decision rule threshold (PROJECT.md §7.5).
     #: NOT provisional: the rule is fixed; the census count selects the branch.
     min_events_for_inferential: int = 2
+    #: ADR-044. PROJECT.md §15 requires a recorded seed for EVERY stochastic
+    #: component and states that one global seed is insufficient. The bootstrap
+    #: seed and replicate count lived as module constants in the run script —
+    #: outside the config universe, so invisible to the resolved config, to the
+    #: experiment metadata, and to the provisional-parameter checklist. That is
+    #: exactly the structural gap LIM-015/ADR-019 records; these are two of the
+    #: three instances it names.
+    bootstrap_seed: int = 42
+    bootstrap_replicates: int = Field(default=1000, ge=100)
 
 
 class AppConfig(StrictModel):

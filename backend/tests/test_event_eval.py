@@ -109,6 +109,61 @@ class TestMatchingWindow:
         assert lead <= raw < lead + GRID_MINUTES
 
 
+class TestDirectionReporting:
+    """ADR-037: the ADR-017 matching rule stays direction-agnostic, but a
+    match may no longer be reported without the direction that produced it.
+
+    The finding this pins: on EVENT-001 (code 1860 'Oil filter gear choked',
+    whose physical signature is a temperature RISE) 72 of the 82 persistent
+    detections inside the match window were abnormally LOW, including the
+    matched one — so the recorded 13.8-day lead was a cold-side excursion.
+    """
+
+    def test_matched_direction_is_reported(self):
+        stream = _detections([0] + [-1] * 6, start="2019-02-20 00:00:00")
+        (match,) = evaluate_events([_event()], [stream], window_days=14, min_samples=3).matches
+        assert match.matched
+        assert match.direction == -1
+        assert match.as_dict()["direction_label"] == "low"
+
+    def test_window_census_counts_both_directions(self):
+        low = _detections([-1] * 4, start="2019-02-20 00:00:00")
+        high = _detections([1] * 4, start="2019-02-22 00:00:00", turbine="T1")
+        (match,) = evaluate_events([_event()], [low, high], window_days=14, min_samples=3).matches
+        assert match.window_direction_census == {"high": 1, "low": 1, "total": 2}
+
+    def test_default_matching_is_unchanged_by_the_new_field(self):
+        """The pre-registered ADR-017 verdict must be reproduced exactly: a
+        LOW run still matches when no expected direction is declared."""
+        low = _detections([-1] * 6, start="2019-02-20 00:00:00")
+        (match,) = evaluate_events([_event()], [low], window_days=14, min_samples=3).matches
+        assert match.matched is True
+        assert match.lead_time_minutes is not None
+
+    def test_expected_direction_filters_the_match(self):
+        """Opt-in only. With +1 declared, the same LOW run no longer matches."""
+        low = persistent_detections(
+            [_detections([-1] * 6, start="2019-02-20 00:00:00")], min_samples=3
+        )
+        assert match_event(_event(), low, window_days=14, expected_direction=1).matched is False
+        assert match_event(_event(), low, window_days=14, expected_direction=-1).matched is True
+
+    def test_expected_direction_picks_the_earliest_eligible_not_the_earliest(self):
+        """A later HIGH run must win over an earlier LOW run when +1 is
+        declared — otherwise the filter would silently report the wrong time."""
+        detections = persistent_detections(
+            [
+                _detections([-1] * 4, start="2019-02-20 00:00:00"),
+                _detections([1] * 4, start="2019-02-22 00:00:00"),
+            ],
+            min_samples=3,
+        )
+        match = match_event(_event(), detections, window_days=14, expected_direction=1)
+        assert match.matched
+        assert match.direction == 1
+        assert match.detection_time_utc == pd.Timestamp("2019-02-22 00:00:00", tz="UTC")
+
+
 class TestSmallNGate:
     def test_single_event_is_descriptive_only(self):
         """M-27 acceptance 1 / ADR-014: no detection-rate claims below the
@@ -145,3 +200,14 @@ class TestFalseAlarms:
         during = _detections([1] * 6, start="2019-03-10 00:00:00")
         result = evaluate_events([_event()], [during], window_days=14, min_samples=3)
         assert result.false_alarm_episodes == 0
+
+    def test_false_alarm_direction_census_is_reported(self):
+        """ADR-037: a detector whose false alarms are predominantly LOW is
+        responding to something other than the heat-generating mechanisms the
+        FMEA layer describes. The episode count alone hides that."""
+        high = _detections([1] * 6, start="2019-08-01 00:00:00")
+        low = _detections([-1] * 6, start="2019-09-01 00:00:00")
+        result = evaluate_events([_event()], [high, low], window_days=14, min_samples=3)
+        assert result.false_alarm_episodes == 2
+        assert result.false_alarm_direction_census == {"high": 1, "low": 1, "total": 2}
+        assert result.as_dict()["false_alarm_direction_census"]["low"] == 1

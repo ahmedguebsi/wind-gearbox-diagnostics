@@ -72,7 +72,11 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=app --cov-report=term-missing"
+# --cov-fail-under makes the coverage figure a CONTRACT rather than a
+# statistic quoted in the README. It was measured but not gated, so a change
+# that dropped coverage would have passed CI silently. Set just below the
+# measured level so it ratchets rather than blocking routine work.
+addopts = "--cov=app --cov-report=term-missing --cov-fail-under=93"
 
 [tool.coverage.run]
 source = ["app"]

@@ -88,8 +88,8 @@ produces numbers without evidence and should not be run.
 |----|-----------|----------|-----------|
 | B1 | Linear reference NBM | RQ1 | Establishes how much thermal variance is linear in operating conditions versus captured non-linearly (ADR-002) |
 | B2 | Single-signal union monitoring | RQ2 | The pre-registered comparison baseline (ADR-016) |
-| B3 | Fleet-median-only detector — *no NBM at all* | RQ2 | PROPOSED. If deviation from the fleet median matches the full pipeline, that is a first-order finding, and an examiner will ask |
-| B4 | Persistence-only detector — threshold + persistence, no EWMA | RQ2 | PROPOSED. Isolates what the EWMA smoothing actually contributes |
+| B3 | Fleet-median-only detector — *no NBM at all* | RQ2 | **DONE 2026-08-18** (ADR-046) — `--arms b3`. **Outcome: comparable to the NBM throughout, and BETTER on the oil target** (residual σ 2.255 vs 2.578 °C; bearing 2.446 vs 2.076). Same ~60× in-control inflation in both arms. Registered as LIM-031 |
+| B4 | Persistence-only detector — threshold + persistence, no EWMA | RQ2 | PROPOSED. Isolates what the EWMA smoothing actually contributes. The M-21 comparators exist and are tested but have never been exercised by any run script |
 
 ### Main approach (required)
 
@@ -103,13 +103,15 @@ produces numbers without evidence and should not be run.
 
 | ID | Ablation | Supports | Status |
 |----|----------|----------|--------|
-| A1 | With / without `nacelle_temperature` | RQ1 predictor defence | **DONE** (ADR-027) |
-| A2 | Fleet-relative residuals, leave-one-out median | RQ2, LIM-023 | REGISTERED (ADR-029) — ready to run |
+| A1 | With / without `nacelle_temperature` | RQ1 predictor defence | **DONE** (ADR-027) — outcome recorded; artifacts deleted, regenerate before citing |
+| A2 | Fleet-relative residuals, leave-one-out median | RQ2, LIM-023 | REGISTERED (ADR-029) — implemented, default off, **not run** |
 | A3 | Upstream lag features vs none | RQ1 | PROPOSED |
-| A4 | Per-turbine vs pooled residual statistics | RQ2 | PROPOSED |
-| A5 | Coordination threshold 1-of-2 vs 2-of-2 at matched rates | RQ2 | **DONE** (matched-FPR sweep) |
-| A6 | Orthogonal common/differential modes vs raw channels | RQ2, RQ3 | PROPOSED (ADR-035) — registered, not run |
+| A4 | Per-turbine vs pooled residual statistics | RQ2 | MEASURED, not decided. `residual_diagnostics` reports centre spread at 0.87–0.93 pooled scales; P-5 ("justify or abandon pooling") remains open |
+| A5 | Coordination threshold 1-of-2 vs 2-of-2 at matched rates | RQ2 | **DONE** (matched-FPR sweep) — pre-ADR-028 denominator; must be re-run |
+| A6 | Orthogonal common/differential modes vs raw channels | RQ2, RQ3 | PROPOSED (ADR-035) — registered, `app/residuals/modes.py` not implemented |
 | A7 | Block-bootstrap vs analytic EWMA control limits | RQ2 detection validity | PROPOSED (ADR-034) — registered, not run |
+| A8 | Multi-output vs one-model-per-target | RQ1 | **DONE 2026-08-18** (ADR-046) — `--arms multi_output`. **Outcome: indistinguishable** — bearing 2.1647 vs 2.1611, oil 2.6904 vs 2.7155; each wins one target, both margins an order of magnitude below the CI half-width. The headline architectural choice buys no accuracy. Registered as LIM-032 |
+| A9 | Seed variance on the final model | RQ1 | **DONE 2026-08-18** (ADR-046) — `--arms seeds`, seeds 42/7/2024. **Outcome: the margin holds.** Seed spread 0.0051 / 0.0115 °C against margins of 0.4007 / 0.2310 over OLS — 79× and 20×. The RQ1 accuracy claim is not a seed artefact |
 
 ### Sensitivity (required)
 

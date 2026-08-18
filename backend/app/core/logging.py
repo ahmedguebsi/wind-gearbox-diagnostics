@@ -88,10 +88,51 @@ def bind_experiment(experiment_id: str) -> Iterator[None]:
         _experiment_id.reset(token)
 
 
+class BufferingHandler(logging.Handler):
+    """Holds formatted records in memory until a destination is known.
+
+    The pipeline runs to completion BEFORE an experiment ID is minted (nothing
+    touches the artifact root unless the whole run succeeds), so the entire
+    scientific phase — ingestion, validation, cleaning, healthy-state
+    construction, the seasonal-coverage warning — used to log to console only
+    and never reached ``run.log``. The stored log of the EXP-20260817-001
+    headline run was a single line: the LIMITATIONS append from the
+    persistence phase (ADR-043).
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setFormatter(JsonFormatter())
+        self.addFilter(ExperimentContextFilter())
+        self.records: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(self.format(record))
+
+
 @contextmanager
-def experiment_logging(experiment_id: str, artifact_dir: Path) -> Iterator[Path]:
+def buffered_logs() -> Iterator[BufferingHandler]:
+    """Capture application logs in memory for later attachment to a run."""
+    handler = BufferingHandler()
+    app_logger = logging.getLogger(APP_LOGGER_NAME)
+    app_logger.addHandler(handler)
+    try:
+        yield handler
+    finally:
+        app_logger.removeHandler(handler)
+        handler.close()
+
+
+@contextmanager
+def experiment_logging(
+    experiment_id: str, artifact_dir: Path, replay: BufferingHandler | None = None
+) -> Iterator[Path]:
     """Bind the experiment ID and mirror all application logs to a JSON-lines
-    file inside the experiment's artifact directory (M-04 acceptance 1)."""
+    file inside the experiment's artifact directory (M-04 acceptance 1).
+
+    ``replay`` prepends records captured before the experiment directory
+    existed, so the artifact holds the whole run rather than its final phase.
+    """
     artifact_dir.mkdir(parents=True, exist_ok=True)
     log_path = artifact_dir / "run.log"
     handler = logging.FileHandler(log_path, encoding="utf-8")
@@ -100,6 +141,9 @@ def experiment_logging(experiment_id: str, artifact_dir: Path) -> Iterator[Path]
     app_logger = logging.getLogger(APP_LOGGER_NAME)
     app_logger.addHandler(handler)
     try:
+        if replay is not None and replay.records:
+            with log_path.open("a", encoding="utf-8") as stream:
+                stream.write("\n".join(replay.records) + "\n")
         with bind_experiment(experiment_id):
             yield log_path
     finally:

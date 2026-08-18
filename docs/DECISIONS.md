@@ -1669,3 +1669,442 @@ Scope note:        beyond the original PROJECT.md scope. §24 requires
 Affected modules:  NEW app/residuals/modes.py, M-19 (normalization ordering),
                    M-30 (runner wiring, metrics.residual_diagnostics), ADR-016,
                    ADR-027, LIM-020, RQ2 and RQ3 chapters.
+
+## ADR-036 — Bias sign convention unified on the residual
+
+Status:            CLOSED (2026-08-18) — DEFECT CORRECTION, no methodological
+                   choice made. Recorded for the author, not decided for them.
+Question:          `app/models/metrics.py` computed bias as
+                   mean(predicted − actual) while `metric_cis` in
+                   `scripts/run_kelmarsh_experiment.py` computed
+                   mean(actual − predicted). Both were documented; neither
+                   referenced the other.
+Evidence:          EXP-20260817-001 shipped BOTH signs for the same quantity.
+                   `metrics.json` records thesis/test/bearing bias = +2.1829;
+                   `evaluation/first_run_summary.json` records −2.1829. Asked
+                   whether the model over- or under-predicts on the monitoring
+                   period, the experiment answers both. Flagged in
+                   `SESSION_STATUS.md` on 2026-08-12 as a "sign-convention
+                   wrinkle to reconcile", never fixed, never entered in the
+                   limitations register, and shipped again on 2026-08-17.
+Decision:          BIAS IS THE MEAN RESIDUAL, mean(actual − predicted).
+Justification:     PROJECT.md §21 defines residual = actual − expected, and
+                   every downstream consumer — the residual engine, the
+                   normalizers, the EWMA detector, the bootstrap — already used
+                   that sign. The metrics layer was the sole outlier, so this
+                   changes one module rather than the pipeline. A positive bias
+                   now means the model UNDER-predicts.
+Enforcement:       a single `residual()` definition in the metrics module, and
+                   a test asserting `compute_metrics().bias` equals the mean of
+                   the residual engine's own column on the same data. The two
+                   paths can no longer drift apart silently.
+Consequence:       the bias sign in `metrics.json` flips for every experiment
+                   recomputed under this code. RMSE, MAE and R² are
+                   sign-invariant and do not move. EXP-20260817-001's stored
+                   artifacts are unchanged by design (the ADR-018 precedent:
+                   defaults embody closed rulings; snapshots pin their own code).
+Verified (2026-08-18): `reproduce EXP-20260817-001` under the corrected code
+                   returns MISMATCH with EXACTLY 8 diffs, and every one of them
+                   is a bias sign:
+                     metrics.nbm.thesis.{validation,monitoring_healthy,test}
+                       .{bearing,oil}.bias
+                     metrics.nbm.elastic_net.validation.{bearing,oil}.bias
+                   ZERO prediction diffs and ZERO other metric diffs. RMSE,
+                   MAE, R2, and every cleaning, split, healthy-state and
+                   detection figure are bit-identical. The change did exactly
+                   what it said and nothing else, which is the property a
+                   surgical correction has to demonstrate.
+Consequence for the stored run:
+                   EXP-20260817-001 no longer reproduces bit-exactly under
+                   current code. That is the ADR-018 situation and is handled
+                   the same way — defaults embody closed rulings; snapshots pin
+                   their own code — but it is one more reason the headline
+                   should be re-run from a clean commit before citation.
+Affected modules:  M-18 (`models/metrics.py`),
+                   `scripts/run_kelmarsh_experiment.py`, tests.
+
+## ADR-037 — Detection direction is reported with every event match
+
+Status:            CLOSED (2026-08-18) — REPORTING CORRECTION. The ADR-017
+                   matching rule is NOT revised; the pre-registered verdict
+                   stands exactly as computed.
+Question:          `EventMatch` recorded a matched detection's timestamp and
+                   lead time but discarded `PersistentDetection.direction`, so
+                   a match could not be read for physical plausibility.
+Evidence:          Re-derived from EXP-20260817-001's stored residuals. Of the
+                   82 persistent detections on Kelmarsh 1 inside the ADR-017
+                   14-day window, 72 are direction −1 (abnormally LOW),
+                   including the matched one at 2019-02-10 20:50 UTC. The
+                   earliest POSITIVE-direction detection is 2019-02-22 05:10,
+                   two days before onset. EVENT-001 is code 1860, "Oil filter
+                   gear choked" — a flow restriction whose physical signature is
+                   a temperature RISE. The FMEA interpreter's own rendering for
+                   the matched timestamp reads "gearbox_bearing_temperature LOW
+                   (EWMA −1.24) ... No candidate mechanism". Fleet-wide,
+                   persistent detections split 10,139 high / 9,550 low.
+Decision:          (a) `EventMatch` carries `direction` and a
+                       `window_direction_census` over every persistent detection
+                       in the window; `EvaluationResult` carries a
+                       `false_alarm_direction_census`. A lead time can no longer
+                       be reported without the sign that produced it.
+                   (b) `match_event` gains an OPTIONAL `expected_direction`,
+                       default None — the unmodified ADR-017 rule. Supplying +1
+                       restricts matching to physically-consistent detections.
+                       Offered for the author to register, never applied by
+                       default (PROJECT.md §34).
+Justification:     ADR-017(b) qualifies a detection by PERSISTENCE and says
+                   nothing about direction, so direction-agnostic matching is
+                   what was pre-registered and it is not revisable now. But a
+                   13.8-day "lead" produced by a cold-side excursion on a
+                   hot-side fault mode is not evidence of early detection, and
+                   the artifact did not let a reader see that. LIM-010 already
+                   forbids presenting the lead as early detection; this makes
+                   the reason visible in the data rather than only in prose.
+Consequence:       the RQ3 case study weakens further and should say so. What
+                   the episode demonstrates is unchanged from LIM-023's framing;
+                   the direction finding strengthens it.
+Affected modules:  M-27 (`evaluation/event_eval.py`), LIM-010, LIM-023, LIM-026.
+
+## ADR-038 — Blocked bootstrap computed per turbine (completes P-3)
+
+Status:            PROPOSED (2026-08-18) — METHODOLOGICAL. Implemented and
+                   measured; awaiting author ratification. The DM half of the
+                   same proposal is already in the code (commit ceb954d).
+Question:          `docs/METHODOLOGY_REVIEW.md` P-3 specified per-turbine
+                   treatment for the blocked bootstrap AND the Diebold–Mariano
+                   test. Only the DM test was rewired. The bootstrap continued
+                   to run on the pooled series.
+Evidence:          The RQ1 frames are sorted by timestamp and INTERLEAVE six
+                   turbines, so consecutive rows are different machines at the
+                   same instant. A "block" therefore spans six machines rather
+                   than a stretch of one machine's history, and the block length
+                   drawn from the interleaved autocorrelation is appropriate to
+                   no single machine. Measured on EXP-20260817-001's stored
+                   residuals, unfiltered test partition, thesis model, bearing:
+                     pooled interleaved  n = 740,463, block 23,690 -> 32 blocks
+                     per turbine         15 / 43 / 95 / 96 / 98 / 184 blocks
+                   The stored summary records block length 132,858 for the
+                   baseline on the same partition — about SIX blocks per
+                   replicate. A percentile interval from six blocks is not an
+                   interval.
+Decision sought:   `PanelBlockedBootstrap`: each turbine is resampled in blocks
+                   whose length comes from THAT turbine's autocorrelation, the
+                   panel is reassembled, and the statistic is evaluated on it.
+                   The reported quantity is unchanged — still the fleet metric;
+                   only the dependence structure preserved by the resample
+                   changes.
+Binding conditions:
+                   (a) per-unit block length, block count and n are reported on
+                       every interval;
+                   (b) an interval whose weakest unit contributes fewer than 30
+                       blocks is flagged `reliable: false` with a caveat — the
+                       standard ADR-034 sets for control-limit calibration.
+Measured consequence:
+                   on the unfiltered test partition the corrected bearing RMSE
+                   interval is [6.523, 8.741] against the stored [6.054, 8.562],
+                   and it is flagged UNRELIABLE because Kelmarsh 6 contributes
+                   only 15 blocks. That flag is the finding: the unfiltered
+                   monitoring period cannot support a quoted interval for that
+                   machine.
+Affected modules:  M-28 (`evaluation/bootstrap.py`),
+                   `scripts/run_kelmarsh_experiment.py`, every reported CI.
+
+## ADR-039 — Multiple-comparison register totals every tuned model
+
+Status:            CLOSED (2026-08-18) — DEFECT CORRECTION against ADR-032(a).
+Question:          PROJECT.md §18 requires the number of evaluated
+                   configurations to be recorded as the silent
+                   multiple-comparison guard (risk R9). `ModelMetadata` carried
+                   the THESIS model's count only.
+Evidence:          EXP-20260817-001 scored 12 XGBoost candidates AND 9 Elastic
+                   Net candidates. `metadata.json` records 12. ADR-032(a) binds
+                   Elastic Net's count to "the multiple-comparison record"; the
+                   count reached `model/elastic_net/meta.json` but never the
+                   experiment record, so the guard understated the search
+                   surface by exactly the amount ADR-032 had added to it.
+Decision:          `ExperimentRecord.multiple_comparison_register` records the
+                   per-model counts, their total, and the models fitted with no
+                   search at all. OLS appears permanently under
+                   `untuned_models` — it has no hyperparameters by design
+                   (ADR-002), and that property is worth stating rather than
+                   inferring from a missing key.
+Not closed by this:
+                   each XGBoost candidate early-stops ON its scoring block and
+                   is then scored on it, so the effective search is wider than
+                   the candidate count in either register. The trial scores rank
+                   candidates; they are not out-of-sample estimates, and the
+                   docstring now says so.
+Affected modules:  M-29 (`experiments/tracker.py`), M-30 (`runner.py`).
+
+## ADR-040 — Inapplicable sensitivity parameters are labelled, not called stable
+
+Status:            CLOSED (2026-08-18) — REPORTING CORRECTION.
+Question:          The M-27 suite labels a parameter STABLE when its swept
+                   values produce identical conclusions. It could not
+                   distinguish "the conclusion is robust to this parameter" from
+                   "this parameter does nothing on this dataset".
+Evidence:          Five of the fourteen provisional parameters have no lever on
+                   the Kelmarsh configuration:
+                   - `fault_pre_exclusion_days` and
+                     `maintenance_post_exclusion_days` — no caller anywhere
+                     constructs fault or maintenance exclusion windows, because
+                     this dataset has no maintenance-confirmed failures
+                     (LIM-002/ADR-013). Verified by inspecting every
+                     `PipelineInputs` construction in the repository.
+                   - the three step-change parameters — ADR-018 disabled
+                     step-change exclusion, and the suite sweeps one parameter at
+                     a time around that base.
+                   All five reported identical outcomes and were labelled
+                   STABLE, which reads as robustness evidence for parameters that
+                   were switched off.
+Decision:          sweeps carry a `status` of NOT_APPLICABLE / FLIPS / STABLE and
+                   an `inapplicable_reason`. An inapplicable parameter is
+                   excluded from `flipping_parameters()` — it cannot raise a
+                   false alarm in the register either — and the tornado table
+                   carries the status column so a zero-range row cannot be read
+                   without it. Applicability is decided by the caller that owns
+                   the run's inputs, not inferred inside the suite.
+Note on §27.3:     the specification's promise that sensitivity analysis
+                   "converts provisional values into defended choices" holds only
+                   for parameters the sweep can actually move. For these five the
+                   honest statement is that this dataset cannot defend them,
+                   which belongs in Chapter 3 rather than in a tornado plot.
+                   Register entry: LIM-027.
+Affected modules:  M-27 (`evaluation/sensitivity.py`),
+                   `scripts/run_sensitivity_suite.py`.
+
+## ADR-041 — Guard 5 covers author-designated event spans
+
+Status:            CLOSED (2026-08-18) — DEFECT CORRECTION.
+Question:          Guard 5 (PROJECT.md §33) warns when a known failure interval
+                   would enter the healthy population. It inspected windows whose
+                   reason is `known_fault_period` only.
+Evidence:          No caller constructs a `known_fault_period` window. This
+                   dataset has no maintenance-confirmed failures (LIM-002), so
+                   the designated failure episode is carried as an ADR-024
+                   `author_designated_event_span` manual window instead. Guard 5
+                   was therefore structurally dead on every real run:
+                   `healthy_state_report.json` reports "findings": [], which
+                   reads as "no known failure reached the healthy set" when in
+                   fact nothing had been checked. One of the eight named
+                   scientific guards was inert wherever it mattered.
+Decision:          (a) Guard 5's scope becomes
+                       {`known_fault_period`, `author_designated_event_span`}.
+                       A designated event span IS a known failure interval for
+                       this purpose, whatever mechanism carries it.
+                   (b) the WINDOW_MATCHED_NOTHING warning fires only when the
+                       window's period overlaps the frame's. Without that scoping
+                       the guard would warn on every run for the EVENT-001 span,
+                       which lies wholly inside the monitoring period and is
+                       correctly absent from the pre-monitoring build — training
+                       the reader to ignore it.
+Scope note:        `author_designated_artefact` (the two ADR-018 Kelmarsh 6
+                   sensor episodes) is deliberately NOT in scope: those are
+                   instrument artefacts, not known failures, and Guard 5 is about
+                   failures reaching the healthy set.
+Affected modules:  M-12 (`data/healthy_state.py`), Chapter 3 guard discussion.
+
+## ADR-042 — EWMA behaviour at stream discontinuities
+
+Status:            PROPOSED (2026-08-18) — METHODOLOGICAL, awaiting author
+                   ruling. Both branches implemented; the DEFAULT IS UNCHANGED,
+                   so no recorded number moves without a ruling.
+Question:          `ewma_recursion` iterates rows sorted by timestamp with no gap
+                   awareness, carrying the EWMA memory across discontinuities as
+                   though the rows were ten minutes apart. Missing residuals are
+                   additionally coerced to zero by `np.nan_to_num`, charting an
+                   absent observation as exactly normal.
+Why it matters here:
+                   the TEST partition is unfiltered and effectively contiguous,
+                   so detection results are barely affected. The HEALTHY
+                   partitions are gap-filled by construction — alarm windows and
+                   the 50 kW floor remove roughly a quarter of the rows — and it
+                   is those partitions that supply the M-20 in-control
+                   characterisation and the control limits. The project already
+                   knows the asymmetry matters: `contiguous_lag1` in
+                   `scripts/diagnose_residual_dependence.py` exists precisely
+                   because "a naive shift would pair rows that are hours apart
+                   and understate the dependence". The correction was applied to
+                   the diagnostic and not to the detector it diagnoses.
+Evidence (measured on EXP-20260817-001 stored residuals):
+                     healthy validation  7,740 discontinuities,
+                                         mean segment 35.6 samples (~6 h)
+                     test partition      766 discontinuities in 1,480,926 samples
+                     in-control, CONTINUOUS  0.16214  (60.06x inflation)
+                     in-control, RESET       0.13958  (51.70x inflation)
+Reading of that:   gap-crossing accounts for roughly a seventh of the measured
+                   in-control inflation. It is real and it is NOT the main cause
+                   — ADR-034's serial-correlation diagnosis survives this
+                   measurement and is strengthened by it, since the inflation
+                   after removing the gap artefact is still ~52x.
+Options:           (a) retain CONTINUOUS and document | (b) adopt RESET |
+                   (c) adopt RESET with time-varying limits.
+Not free:          restarting at z = 0 reintroduces the EWMA start-up transient
+                   at every segment boundary, where the steady-state limit is too
+                   wide. A RESET run should be read with the time-varying limit
+                   formulation, which is why (b) and (c) are separate options.
+Decision:          — (author)
+Affected modules:  M-20 (`residuals/ewma.py`), M-03 (`detection.gap_handling`,
+                   provisional-marked and swept), M-27, ADR-034, LIM-024.
+
+## ADR-043 — The whole run reaches the experiment log
+
+Status:            CLOSED (2026-08-18) — DEFECT CORRECTION.
+Question:          `experiment_logging` wrapped only the persistence phase of
+                   `run_experiment`.
+Evidence:          EXP-20260817-001's stored `run.log` is ONE line long — the
+                   LIMITATIONS append. The ~16 minutes of scientific work before
+                   it, including the seasonal-coverage extrapolation warning that
+                   is itself a registered limitation (LIM-013), went to console
+                   only and is not in the artifact.
+Decision:          the pipeline phase logs into an in-memory buffer, replayed
+                   into `run.log` once the experiment directory exists. The
+                   all-or-nothing persistence property is preserved: the pipeline
+                   still completes in memory before anything touches the artifact
+                   root.
+Affected modules:  M-04 (`core/logging.py`), M-30 (`runner.py`).
+
+## ADR-044 — Seed register completed; dirty-tree runs refused
+
+Status:            CLOSED (2026-08-18) — DEFECT CORRECTION against §15.
+Question:          PROJECT.md §15 requires "random seed for EVERY stochastic
+                   component (model seed, subsample seed, bootstrap seed) — one
+                   global seed is insufficient", and requires a git commit so a
+                   result can be regenerated from the code that produced it.
+Evidence:          (a) EXP-20260817-001 records seeds {"model": 42}. The
+                       bootstrap seed and replicate count were module constants
+                       in the run script — outside the config universe, so absent
+                       from the resolved config, absent from the config hash,
+                       absent from metadata, and invisible to the
+                       provisional-parameter checklist. This is exactly the
+                       structural gap LIM-015/ADR-019 describes, and two of the
+                       three instances it names by way of illustration.
+                   (b) EXP-20260817-001 records git_dirty: true. The commit in
+                       its metadata does not name the code that produced it, and
+                       the difference is unrecorded.
+Decision:          (a) `bootstrap_seed` and `bootstrap_replicates` become
+                       `EvaluationConfig` fields, so they enter the resolved
+                       config, the config hash and the seed register. `seeds` now
+                       carries `model` and `bootstrap`.
+                   (b) the run DRIVERS refuse to start on a dirty working tree
+                       unless `--allow-dirty` is passed, and refuse BEFORE the
+                       ~16-minute pipeline rather than after it.
+Placement note:    the check lives in the drivers, not the library. That is where
+                   the intent to produce a citable result is declared — the
+                   Kelmarsh script already refuses to start without
+                   `--approved-by` — and putting it in `run_pipeline` would also
+                   block the in-memory sensitivity sweeps and the test suite,
+                   neither of which produces a thesis artifact.
+Residual gap:      the third constant LIM-015 names, the M-20
+                   `material_inflation_threshold`, remains hard-coded. LIM-015
+                   stays OPEN; its structural point is unchanged.
+Affected modules:  M-03 (`core/config.py`), M-30 (`runner.py`),
+                   `scripts/run_kelmarsh_experiment.py`, LIM-015.
+
+## ADR-045 — PROJECT.md §20 diagnostics and figures are produced
+
+Status:            CLOSED (2026-08-18) — SPECIFICATION GAP CLOSED.
+Question:          §20 mandates condition-sliced error diagnostics and five model
+                   diagnostic plots; §31 requires PNG/SVG export.
+Evidence:          `condition_diagnostics` and `condition_sliced` were
+                   implemented under M-18, fully tested, and had ZERO non-test
+                   callers — no experiment ever produced them.
+                   `artifacts/*/plots/` was empty in every run. The only plotting
+                   code in the repository belonged to a one-off EVENT-001 context
+                   script whose outputs belong to a deleted experiment.
+Why this is not cosmetic:
+                   - the ambient slice IS the seasonal-shift diagnostic §20 names
+                     and the mitigation LIM-013 names;
+                   - the power and wind slices are the heteroscedasticity
+                     evidence the §22 normalization design rests on, and the
+                     evidence decision D-12 (condition-binned normalization) is
+                     blocked on. D-12 could not be closed because its closure
+                     evidence was never generated.
+Decision:          (a) the runner computes condition diagnostics for every
+                       out-of-sample partition, model and target, and persists
+                       `evaluation/condition_diagnostics.json`;
+                   (b) `scripts/make_diagnostic_plots.py` renders the §20 figures
+                       from STORED ARTIFACTS ONLY, so they regenerate in seconds
+                       without re-running the pipeline and a figure can never
+                       disagree with the metric beside it;
+                   (c) the monitoring-period condition variables are persisted as
+                       `evaluation/conditions.parquet` — under `evaluation/`
+                       rather than `predictions/`, because `reproduce` requires
+                       exact frame equality over every stored prediction and a
+                       non-prediction file there is diffed as a missing one.
+Affected modules:  M-18, M-30, NEW `scripts/make_diagnostic_plots.py`, D-12.
+
+## ADR-046 — Three required-but-unrun arms executed
+
+Status:            CLOSED (2026-08-18) — EXECUTION of arms the protocol already
+                   required. No methodological choice is made here; the
+                   outcomes are recorded as measured, including the ones that
+                   weaken the project's claims.
+Question:          `docs/EXPERIMENT_PROTOCOL.md` §4 lists a minimum experiment
+                   matrix as "the smallest set that supports the thesis
+                   claims", and states that anything outside it "produces
+                   numbers without evidence". Three entries had never been run.
+Implementation:    `scripts/run_robustness_suite.py`, one JSON per experiment
+                   directory, each arm a full in-memory `run_pipeline` with
+                   nothing persisted per arm.
+Run conditions:    executed with `--allow-dirty` against an uncommitted tree
+                   (ADR-044), so these are VALIDATION RUNS OF THE CORRECTED
+                   PIPELINE, not citable headline results. Re-running from a
+                   commit is a ~20-minute step and is required before citation.
+
+B3 — fleet-median-only detector, NO NBM:
+                   the protocol notes "an examiner will ask". Leave-one-out
+                   fleet deviation of the raw target, pushed through the
+                   identical normalizer, EWMA detector and matched-FPR sweep,
+                   so the arms differ only in how the expected value is formed.
+                   OUTCOME: comparable throughout, and BETTER on the oil target
+                   (residual sigma 2.255 vs the NBM's 2.578 degC; bearing 2.446
+                   vs 2.076). Same in-control pathology (64.1x vs 60.1x). Both
+                   reach 10 FA/turbine-year.
+                   Registered as LIM-031. The NBM's contribution over a
+                   no-model baseline is not established by detection behaviour.
+
+A8 — multi-output vs one model per target (PROJECT.md §18 mode B):
+                   OUTCOME: indistinguishable. Bearing 2.1647 vs 2.1611, oil
+                   2.6904 vs 2.7155 — each configuration wins one target, both
+                   margins under 1% of RMSE and an order of magnitude below the
+                   CI half-width. Registered as LIM-032. The thesis cannot
+                   claim accuracy benefit from its headline architectural
+                   choice.
+
+A9 — three-seed variance (42 / 7 / 2024):
+                   OUTCOME, and the one clean positive of the three: seed
+                   spread is 0.0051 degC (bearing) and 0.0115 degC (oil)
+                   against a margin over OLS of 0.4007 and 0.2310 — the
+                   XGBoost advantage exceeds seed noise by roughly 79x and 20x.
+                   The RQ1 accuracy claim is not a seed artefact, and that is
+                   now a measurement rather than an assumption.
+                   Scope: it establishes stability of the model-versus-baseline
+                   ORDERING under initialisation. It does not address the wider
+                   intervals ADR-038 produces, nor the per-turbine reversal
+                   already on record (Kelmarsh 5 favours the baseline on oil).
+
+Read together:     the three arms narrow the contribution claim to something
+                   specific. XGBoost IS more accurate than the linear reference
+                   and robustly so (A9); that advantage does NOT come from the
+                   multi-target architecture (A8); and it does NOT translate
+                   into better detection than a no-model fleet baseline (B3).
+                   The claim that survives all three is narrower than the one
+                   currently framed, and more interesting: a tuned
+                   gradient-boosted NBM represents healthy gearbox thermal
+                   behaviour more accurately than a linear reference, and that
+                   accuracy gain does not by itself yield better anomaly
+                   detection on this dataset.
+
+Why these three:   each answers a question an examiner asks first, and each was
+                   cheap relative to its evidential value. B3 in particular is
+                   the first-order sanity check on the entire instrument, was
+                   registered by the project itself, and had been left unrun
+                   while more elaborate analyses were built on top of the
+                   assumption it tests.
+Reporting rule:    all three outcomes weaken or complicate the project's
+                   claims, and all three are reported first-class rather than
+                   in a caveat — the same discipline ADR-016's negative verdict
+                   and LIM-023's fleet finding were handled with.
+Affected:          EXPERIMENT_PROTOCOL §4 (B3, A8, A9 statuses), LIM-031,
+                   LIM-032, Chapters 4 and 6.

@@ -55,11 +55,12 @@ def slice_ordering(nbm: dict, targets: tuple[str, ...]) -> dict[str, str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--downloads", type=Path, default=Path(r"C:\Users\mokhles.khedhri.993\Downloads")
-    )
+    # Repo-relative, matching run_kelmarsh_experiment.py. The previous default
+    # pointed at a different machine's Downloads directory, so the script could
+    # not run anywhere but its author's workstation (ADR-044 housekeeping).
+    parser.add_argument("--downloads", type=Path, default=REPO_ROOT / "dataset")
     parser.add_argument("--artifacts", type=Path, default=REPO_ROOT / "artifacts")
-    parser.add_argument("--with-arm", default="EXP-20260813-002")
+    parser.add_argument("--with-arm", default=None)
     args = parser.parse_args()
 
     schema = default_schema()

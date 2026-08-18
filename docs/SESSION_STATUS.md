@@ -1,5 +1,21 @@
 # SESSION_STATUS.md — Handoff (written 2026-08-12, end of session)
 
+> **⚠ HISTORICAL SNAPSHOT — DO NOT READ AS CURRENT STATE (banner added
+> 2026-08-18).** This file describes the repository as it stood on
+> 2026-08-12 and is retained as the handoff record of that session, not
+> corrected in place. Everything below is superseded on at least these
+> points: the suite is now 504 tests (not 378); the schema is 1.3.0 (not
+> 1.2.0); decisions run to ADR-045 (not ADR-017); D-07 is CLOSED (ADR-023);
+> five experiments have been run since. Current state lives in
+> [`DECISIONS.md`](DECISIONS.md), [`LIMITATIONS.md`](LIMITATIONS.md),
+> [`EXPERIMENT_PROTOCOL.md`](EXPERIMENT_PROTOCOL.md) and the README.
+>
+> One item below was still open five days later and is worth naming: the
+> "sign-convention wrinkle to reconcile" recorded in *In flight /
+> half-finished* shipped again in the 2026-08-17 headline run before being
+> fixed under ADR-036. A known defect parked in a handoff note is a defect
+> that ships.
+
 Snapshot for the next session. Authoritative sources remain DECISIONS.md,
 LIMITATIONS.md, CHAPTER3_DECISION_QUEUE.md, and the experiment artifacts;
 this file is a pointer, not a record of decisions.

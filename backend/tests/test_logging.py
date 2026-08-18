@@ -101,3 +101,47 @@ class TestExperimentLogFile:
         with experiment_logging("EXP-20260811-004", tmp_path / "exp"):
             assert len(app_logger.handlers) == len(before) + 1
         assert app_logger.handlers == before
+
+
+class TestBufferedReplay:
+    """ADR-043: the whole run reaches run.log, not only its final phase.
+
+    ``run_experiment`` completes the pipeline in memory BEFORE minting an
+    experiment ID (nothing touches the artifact root unless the run succeeds),
+    so the entire scientific phase logged to console only. EXP-20260817-001's
+    stored run.log was one line long.
+    """
+
+    def test_records_from_before_the_directory_existed_are_replayed(self, tmp_path):
+        from app.core.logging import buffered_logs, experiment_logging, get_logger
+
+        setup_logging()
+        logger = get_logger("pipeline")
+        with buffered_logs() as buffered:
+            logger.warning("seasonal coverage: the model extrapolates")
+            logger.info("healthy state: 656293/847011 retained")
+        assert len(buffered.records) == 2
+
+        directory = tmp_path / "EXP-20260101-001"
+        with experiment_logging("EXP-20260101-001", directory, replay=buffered):
+            logger.info("persisting experiment")
+
+        lines = [
+            json.loads(line)
+            for line in (directory / "run.log").read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        messages = [entry["message"] for entry in lines]
+        assert "seasonal coverage: the model extrapolates" in messages
+        assert "healthy state: 656293/847011 retained" in messages
+        assert "persisting experiment" in messages
+
+    def test_replay_is_optional_and_absent_buffer_changes_nothing(self, tmp_path):
+        from app.core.logging import experiment_logging, get_logger
+
+        setup_logging()
+        directory = tmp_path / "EXP-20260101-002"
+        with experiment_logging("EXP-20260101-002", directory):
+            get_logger("pipeline").info("only this")
+        content = (directory / "run.log").read_text(encoding="utf-8").strip().splitlines()
+        assert len(content) == 1

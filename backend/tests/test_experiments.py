@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
-from app.core.config import AppConfig
+from app.core.config import AppConfig, config_hash, resolved_dict
 from app.core.errors import CausalSeparationError, ConfigError, ProvenanceError, SplitPolicyError
 from app.core.limitations import append_limitation, next_lim_id
 from app.data.guards import FeatureConfig
@@ -351,6 +351,51 @@ class TestModelStages:
         assert record.model.hyperparameters["colsample_bytree"] == 0.8
         resolved = record.resolved_config
         assert resolved["model"]["tuning"]["selection"] == "baseline_normalized_mean_rmse"
+
+    def test_multiple_comparison_register_totals_every_tuned_model(self, tmp_path, mapping, store):
+        """ADR-039 / PROJECT.md §18 risk R9.
+
+        The guard exists to make the SEARCH SURFACE visible. Recording only the
+        thesis model's count reported 12 for a run that had scored 12 XGBoost
+        candidates and 9 Elastic Net candidates — understating it by exactly
+        the amount ADR-032(a) promised to add.
+        """
+        csv = _write_fixture_csv(tmp_path / "scada_noisy.csv", noisy=True)
+        inputs = PipelineInputs(
+            schema=SCHEMA,
+            mapping=mapping,
+            source_paths=(csv,),
+            feature=FeatureConfig(
+                predictors=(WIND_SPEED, ACTIVE_POWER, AMBIENT_TEMPERATURE),
+                targets=(GEARBOX_OIL_TEMPERATURE, GEARBOX_BEARING_TEMPERATURE),
+            ),
+            split_spec=SplitSpec(),
+            cleaning_operations=("drop_missing_any_target",),
+        )
+        config = _config(
+            model={
+                "tuning": {
+                    "max_depth_grid": [2, 3],
+                    "learning_rate_grid": [0.1],
+                    "subsample_grid": [1.0],
+                    "n_estimators": 30,
+                    "early_stopping_rounds": 5,
+                },
+                "elastic_net_tuning": {"alpha_grid": [0.1, 1.0], "l1_ratio_grid": [0.5]},
+            }
+        )
+        experiment_id, _ = run_experiment(config, inputs, store)
+        register = store.load_record(experiment_id).multiple_comparison_register
+
+        assert register.per_model["thesis"] == 2
+        assert register.per_model["elastic_net"] == 2
+        # OLS has no hyperparameters by design (ADR-002) and must show as
+        # untuned rather than be absent.
+        assert register.per_model["baseline"] == 0
+        assert "baseline" in register.untuned_models
+        assert register.total_configurations_evaluated == 4
+        # The point of the fix: the total exceeds the thesis model's share.
+        assert register.total_configurations_evaluated > register.per_model["thesis"]
 
     def test_tuning_without_baseline_rejected(self, inputs):
         """ADR-021: the selection rule needs the baseline's validation RMSE."""
@@ -784,3 +829,128 @@ class TestFleetRelativeArm:
         assert detection["fleet_relative"] is True
         assert "training" in detection["fleet_adjustment"]
         assert detection["fleet_adjustment"]["training"]["min_peers"] == 2
+
+
+class TestSeedRegister:
+    """PROJECT.md §15: a seed per stochastic component; one global seed is
+    explicitly insufficient. The bootstrap seed lived as a module constant in
+    the run script — outside the config universe, so absent from the resolved
+    config, the metadata and the provisional checklist (ADR-044; the gap
+    LIM-015 describes structurally)."""
+
+    def test_every_stochastic_component_seed_is_recorded(self, inputs, store):
+        experiment_id, _ = run_experiment(_config(), inputs, store)
+        seeds = store.load_record(experiment_id).seeds
+        assert seeds["model"] == 42
+        assert seeds["bootstrap"] == 42
+        assert set(seeds) >= {"model", "bootstrap"}
+
+    def test_bootstrap_seed_reaches_the_resolved_config(self):
+        resolved = resolved_dict(AppConfig())
+        assert resolved["evaluation"]["bootstrap_seed"] == 42
+        assert resolved["evaluation"]["bootstrap_replicates"] == 1000
+
+    def test_changing_the_bootstrap_seed_changes_the_config_hash(self):
+        """A seed outside the config universe cannot change the experiment
+        identity — which is precisely why it had to come inside it."""
+        base = AppConfig()
+        changed = AppConfig.model_validate(
+            {**base.model_dump(mode="python"), "evaluation": {"bootstrap_seed": 7}}
+        )
+        assert config_hash(base) != config_hash(changed)
+
+
+class TestConditionDiagnosticsWiring:
+    """ADR-045 / PROJECT.md §20. `condition_diagnostics` was implemented under
+    M-18, fully tested, and had ZERO non-test callers — so no experiment ever
+    produced the heteroscedasticity evidence the §22 normalization design rests
+    on, or the ambient slice that is LIM-013's named mitigation."""
+
+    def test_condition_tables_are_persisted_per_partition_model_and_target(self, inputs, store):
+        experiment_id, result = run_experiment(_config(), inputs, store)
+        path = store.experiment_dir(experiment_id) / "evaluation" / "condition_diagnostics.json"
+        assert path.is_file()
+
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        assert payload == result.condition_diagnostics
+        # Out-of-sample partitions only: training error is not a diagnostic.
+        assert "training" not in payload
+        assert {"validation", "test", "monitoring_healthy"} >= set(payload)
+
+        tables = payload["validation"]["thesis"][GEARBOX_OIL_TEMPERATURE]
+        assert set(tables) == {ACTIVE_POWER, WIND_SPEED, AMBIENT_TEMPERATURE}
+        for rows in tables.values():
+            assert rows, "a condition slice with no bins is not a diagnostic"
+            for row in rows:
+                assert {"bin_left", "bin_right", "n", "rmse", "mae", "r2", "bias"} <= set(row)
+                assert row["n"] > 0
+
+    def test_ambient_slice_exists_for_every_model(self, inputs, store):
+        """LIM-013's mitigation must cover the baselines too — the comparison
+        is only meaningful if the same diagnostic exists for both arms."""
+        experiment_id, _ = run_experiment(_config(), inputs, store)
+        payload = json.loads(
+            (
+                store.experiment_dir(experiment_id) / "evaluation" / "condition_diagnostics.json"
+            ).read_text(encoding="utf-8")
+        )
+        for model in ("thesis", "baseline"):
+            assert (
+                AMBIENT_TEMPERATURE
+                in payload["monitoring_healthy"][model][GEARBOX_BEARING_TEMPERATURE]
+            )
+
+    def test_monitoring_conditions_are_persisted_outside_predictions(self, inputs, store):
+        """ADR-045(c): under evaluation/, never predictions/ — `reproduce`
+        requires exact frame equality over every stored prediction and would
+        diff a non-prediction file there as a missing prediction."""
+        experiment_id, _ = run_experiment(_config(), inputs, store)
+        directory = store.experiment_dir(experiment_id)
+        assert (directory / "evaluation" / "conditions.parquet").is_file()
+        assert not (directory / "predictions" / "conditions.parquet").exists()
+        conditions = pd.read_parquet(directory / "evaluation" / "conditions.parquet")
+        assert {"timestamp", "turbine_id"} <= set(conditions.columns)
+        assert reproduce(experiment_id, store).status is ReproductionStatus.EXACT_MATCH
+
+
+class TestLegacyMetadataCompatibility:
+    """Experiment records are permanent evidence, so adding a required field
+    must not orphan the runs already on disk.
+
+    Caught by running `reproduce` against the pre-ADR-039 headline experiment
+    after adding `multiple_comparison_register` — which is exactly what that
+    command exists to catch.
+    """
+
+    def test_pre_adr_039_record_still_loads_and_is_marked(self, inputs, store):
+        experiment_id, _ = run_experiment(_config(), inputs, store)
+        path = store.experiment_dir(experiment_id) / "metadata.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+
+        # Rewrite the record as it would have been written before ADR-039.
+        del payload["multiple_comparison_register"]
+        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+        record = store.load_record(experiment_id)
+        register = record.multiple_comparison_register
+        assert register.recorded_before_adr_039 is True
+        # The thesis count is recovered from where it used to live...
+        assert register.per_model["thesis"] == record.model.tuning_configurations_evaluated
+        # ...and is NOT presented as a complete search record.
+        assert register.total_configurations_evaluated == register.per_model["thesis"]
+
+    def test_current_records_are_not_marked_legacy(self, inputs, store):
+        experiment_id, _ = run_experiment(_config(), inputs, store)
+        register = store.load_record(experiment_id).multiple_comparison_register
+        assert register.recorded_before_adr_039 is False
+        assert "baseline" in register.per_model
+
+    def test_reproduce_still_works_on_a_legacy_record(self, inputs, store):
+        """The capability that surfaced the break must be the one that guards it."""
+        experiment_id, _ = run_experiment(_config(), inputs, store)
+        path = store.experiment_dir(experiment_id) / "metadata.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        del payload["multiple_comparison_register"]
+        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+        assert reproduce(experiment_id, store).status is ReproductionStatus.EXACT_MATCH

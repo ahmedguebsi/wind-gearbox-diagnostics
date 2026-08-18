@@ -64,20 +64,31 @@ CandidateMechanism confidence enum (M-26).
 
 ## 4. Methodology Alignment Table (LOCKED constraint → implementing components)
 
-Module IDs refer to IMPLEMENTATION_PLAN.md. Status: ✅ implemented, 🔜 planned.
+Module IDs refer to IMPLEMENTATION_PLAN.md. Status: ✅ implemented and
+exercised on real data, ⚠ implemented but not exercised.
+*(Status column corrected 2026-08-18: it still read "🔜 planned" for modules
+completed weeks earlier. A requirements table that understates what is built
+is as misleading as one that overstates it.)*
 
 | Lock | Constraint | Implementing component(s) | Status | Thesis-text alignment |
 |------|-----------|---------------------------|--------|----------------------|
-| LOCKED-01 | Multi-target XGBoost is THE thesis NBM | M-16 (`model_kind == THESIS`, sole THESIS registrant); xgboost mandatory dep | 🔜 (dep ✅) | Ch1 RQ1 model-agnostic wording; locked form governs (§3 above) |
-| LOCKED-02 | EWMA + control limits PRIMARY | M-20; `DetectionConfig.method` admits only `"ewma"` | 🔜 (config lock ✅) | Ch2 §2.3 grounds EWMA-on-residuals (Lu & Reynolds 1999) — aligned |
-| LOCKED-03 | FMEA rules SOLE interpretation | M-25/M-26; no attribution imports | 🔜 | Ch2 §2.7 motivates knowledge-based route — aligned |
-| LOCKED-04 | Chronological validation only | M-13 + `SplitPolicyGuard` | 🔜 (error type ✅) | Ch1/Ch2 silent; Ch3 expected to specify — UNKNOWN detail |
-| LOCKED-05 | Exogenous-only predictors | M-14 validator | 🔜 | Ch2 §2.4 evidence (Felgueira 2019; Wang 2018) — aligned |
-| LOCKED-06 | No target-derived features (Guard 8) | M-14; `CausalSeparationError` | 🔜 (error type ✅) | Ch2 Table 2.2 flags lagged-target NARX precedent as coupled — aligned |
-| LOCKED-07 | No SHAP/XAI anywhere | Structural absence + CI scans | ✅ absence / 🔜 scan | **⚠ Ch1 Objective 2 conflicts as drafted — ADR-006, pending author correction.** Ch2 critique of attribution supports the lock |
-| LOCKED-08 | No synthetic fault labels | Fixture policy; Guard 6 watermarking | 🔜 | Not addressed in Ch1/Ch2 (software-side constraint) |
-| LOCKED-09 | "Causal separation" register | M-14 vocabulary test; docs review | 🔜 | Ch1/Ch2 use "causal separation"/"causal structure" — aligned |
+| LOCKED-01 | Multi-target XGBoost is THE thesis NBM | M-16 (`model_kind == THESIS`, sole THESIS registrant); registry meta-test asserts exactly one THESIS registrant | ✅ | Ch1 RQ1 model-agnostic wording; locked form governs (§3 above) |
+| LOCKED-02 | EWMA + control limits PRIMARY | M-20; `DetectionConfig.method` admits only `"ewma"` | ✅ detector / ⚠ the M-21 comparators exist but no run script exercises them, so the PRIMARY designation is not yet defended by comparison (§28) | Ch2 §2.3 grounds EWMA-on-residuals — aligned |
+| LOCKED-03 | FMEA rules SOLE interpretation | M-25/M-26; no attribution imports | ✅ mechanism / ⚠ LIM-030: at the measured r ≈ 0.95 the rule base cannot discriminate between mechanisms on this dataset | Ch2 §2.7 motivates knowledge-based route — aligned |
+| LOCKED-04 | Chronological validation only | M-13 + `SplitPolicyGuard` (Guard 3) | ✅ | Ch1/Ch2 silent; Ch3 expected to specify — UNKNOWN detail |
+| LOCKED-05 | Exogenous-only predictors | M-14 validator; `fit_model` chokepoint with a meta-test forbidding any other `.fit(` caller | ✅ | Ch2 §2.4 evidence (Felgueira 2019; Wang 2018) — aligned |
+| LOCKED-06 | No target-derived features (Guard 8) | M-14; `CausalSeparationError`; negative tests parametrised over every transform class | ✅ | Ch2 Table 2.2 flags lagged-target NARX precedent as coupled — aligned |
+| LOCKED-07 | No SHAP/XAI anywhere | Structural absence; MAPE meta-test over the models layer | ✅ | **⚠ Ch1 Objective 2 still conflicts as drafted — ADR-006, open since 2026-08-11, chapter not yet corrected.** Ch2's critique of attribution supports the lock |
+| LOCKED-08 | No synthetic fault labels | Fixture policy; every fixture docstring carries the watermark | ✅ | Not addressed in Ch1/Ch2 (software-side constraint) |
+| LOCKED-09 | "Causal separation" register | M-14 vocabulary; user-facing docs reviewed | ✅ | Ch1/Ch2 use "causal separation"/"causal structure" — aligned |
 | LOCKED-10 | Out of scope: oil debris, pressure differentials, deployment, SHAP | No implementing modules | ✅ absence | Ch2 mentions oil-debris only as CMS-side context — aligned |
+
+> **Guard coverage note (added 2026-08-18, ADR-041).** Of the eight PROJECT.md
+> §33 guards, seven fire on real runs. Guard 5 did not: it inspected only
+> `known_fault_period` windows, which no caller constructs on this dataset, so
+> every run reported an empty findings list that read as a clean check. Its
+> scope now includes ADR-024 designated event spans. A guard that cannot fire
+> is not a guard, and the alignment table should not have implied otherwise.
 
 ## 5. Expected inputs and outputs
 

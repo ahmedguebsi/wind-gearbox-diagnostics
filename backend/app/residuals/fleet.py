@@ -87,7 +87,7 @@ class FleetAdjustmentReport:
         }
 
 
-def _leave_one_out_median(values: np.ndarray, min_peers: int) -> np.ndarray:
+def leave_one_out_median(values: np.ndarray, min_peers: int) -> np.ndarray:
     """Row-wise leave-one-out median of a (n_timestamps, n_turbines) array.
 
     Entry [t, j] is the median of row t EXCLUDING column j, or NaN where
@@ -140,7 +140,7 @@ def fleet_relative_residuals(
         wide = block.pivot(
             index=TIMESTAMP_COLUMN, columns=TURBINE_COLUMN, values=RAW_RESIDUAL_COLUMN
         )
-        reference = _leave_one_out_median(wide.to_numpy(dtype=float), min_peers)
+        reference = leave_one_out_median(wide.to_numpy(dtype=float), min_peers)
         reference_frame = pd.DataFrame(reference, index=wide.index, columns=wide.columns)
         long_reference = reference_frame.reset_index().melt(
             id_vars=TIMESTAMP_COLUMN,

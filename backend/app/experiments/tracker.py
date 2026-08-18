@@ -64,7 +64,14 @@ class ExclusionsMetadata(StrictRecord):
 
 class ModelMetadata(StrictRecord):
     """Model identity. ``model_kind`` is machine-readable THESIS/BASELINE
-    labelling (ARCHITECTURE.md §5.1); pipeline-only runs record ``none``."""
+    labelling (ARCHITECTURE.md §5.1); pipeline-only runs record ``none``.
+
+    ``tuning_configurations_evaluated`` is the THESIS model's search. The
+    experiment-wide multiple-comparison total lives in
+    :attr:`ExperimentRecord.multiple_comparison_register`, because a run may
+    tune more than one model and PROJECT.md §18's guard is about the total
+    number of configurations scored, not one model's share of it.
+    """
 
     type: str
     model_kind: str
@@ -73,6 +80,34 @@ class ModelMetadata(StrictRecord):
     #: ADR-021 per-candidate records; default keeps pre-ADR-021 metadata
     #: loadable.
     tuning_trials: tuple[dict[str, Any], ...] = ()
+
+
+class MultipleComparisonRegister(StrictRecord):
+    """Every configuration this experiment scored, across every tuned model.
+
+    PROJECT.md §18 requires the number of evaluated configurations to be
+    recorded as the silent-multiple-comparison guard (risk R9). Before
+    ADR-039 the record carried only the thesis model's count, so an
+    experiment that scored 12 XGBoost candidates AND 9 Elastic Net candidates
+    reported 12 — the guard understated the search surface by the exact
+    amount ADR-032(a) had promised to add to it.
+    """
+
+    #: model key -> configurations scored for that model.
+    per_model: dict[str, int]
+    #: Sum across models: the number §18's guard is about.
+    total_configurations_evaluated: int
+    #: Models fitted with no search at all (zero configurations), listed so
+    #: "untuned" is visible rather than inferred from a missing key. OLS is
+    #: permanently here by design — it has no hyperparameters (ADR-002).
+    untuned_models: tuple[str, ...] = ()
+    #: True on records written BEFORE ADR-039, upgraded on load by
+    #: ``store._upgrade_legacy_payload``. Their per-model breakdown carries the
+    #: thesis model's count only, because that is all that was recorded — the
+    #: total may therefore UNDERSTATE the search actually performed. Marked
+    #: rather than silently backfilled, so a legacy figure is never mistaken
+    #: for a complete one.
+    recorded_before_adr_039: bool = False
 
 
 class GuardAttestations(StrictRecord):
@@ -104,6 +139,8 @@ class ExperimentRecord(StrictRecord):
     dataset: DatasetMetadata
     split: SplitMetadata
     model: ModelMetadata
+    #: PROJECT.md §18 multiple-comparison guard across every tuned model.
+    multiple_comparison_register: MultipleComparisonRegister
     seeds: dict[str, int]
     environment: VersionStamp
     guards: GuardAttestations

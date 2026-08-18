@@ -5,11 +5,15 @@ all targets); one-model-per-target is supported as the ablation mode
 (PROJECT.md §18). Fits are seeded and single-threaded so repeated fits with
 identical config+seed are bit-identical (M-16 acceptance 2).
 
-Hyperparameter tuning happens on the healthy VALIDATION block only, and the
-number of configurations evaluated is recorded (silent multiple-comparison
-guard, PROJECT.md §18): the tuning API structurally takes train and
-validation frames — there is no argument through which test data could
-enter (M-16 acceptance 3).
+Hyperparameter tuning scores candidates on an INNER HOLDOUT carved
+chronologically from the end of TRAIN (ADR-030), never on the healthy
+VALIDATION block — which supplies the M-20 in-control characterisation and,
+under one ADR-001 branch, the threshold statistics. The tuning API
+structurally takes only a fitting frame and a scoring frame, so there is no
+argument through which test data could enter (M-16 acceptance 3). The number
+of configurations evaluated is recorded as the silent multiple-comparison
+guard (PROJECT.md §18), and totalled across every tuned model in the
+experiment record's multiple-comparison register (ADR-039).
 """
 
 from __future__ import annotations
@@ -155,12 +159,20 @@ class XGBoostNBM:
         baseline_validation_rmse: Mapping[str, float] | None = None,
         early_stopping_rounds: int | None = None,
     ) -> FitReport:
-        """Select hyperparameters on the validation block, per ADR-021.
+        """Select hyperparameters on the supplied scoring block, per ADR-021.
 
-        Only the validation block scores candidates (PROJECT.md §18); the
-        evaluated-configuration count and per-candidate trial records land
-        in the FitReport. The scored winner's fitted trees are adopted
-        directly — the model selected IS the model used.
+        The caller supplies the fitting and scoring frames; under ADR-030 the
+        runner passes an inner holdout carved from TRAIN, so the healthy
+        VALIDATION block stays clean for threshold calibration. The
+        evaluated-configuration count and per-candidate trial records land in
+        the FitReport. The scored winner's fitted trees are adopted directly,
+        then the runner refits on full TRAIN at the selected iteration count
+        so every model sees identical training rows.
+
+        Note for the reader of the trial records: each candidate early-stops
+        ON the scoring block and is then scored on it, so the recorded scores
+        carry selection optimism. They rank candidates; they are not
+        out-of-sample estimates.
         """
         if not candidates:
             raise ConfigError("Tuning grid is empty")

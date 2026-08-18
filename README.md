@@ -118,19 +118,89 @@ scripts/                  # experiment drivers and census utilities
 Dependency direction is contractually enforced: `import-linter` declares the
 layer stack in `backend/pyproject.toml` and CI fails on any upward import.
 
+## Model diagnostics and figures (PROJECT.md §20, §31)
+
+```bash
+uv run python ../scripts/make_diagnostic_plots.py --experiment EXP-YYYYMMDD-NNN
+```
+
+Renders the §20 figures — actual vs predicted, residual distribution, residual
+dispersion over time, and residual vs active power / wind speed / ambient
+temperature — from **stored artifacts only**, so they regenerate in seconds
+without re-running the pipeline and cannot disagree with the metrics beside
+them. The runner separately persists the condition-sliced error tables to
+`evaluation/condition_diagnostics.json` (ADR-045).
+
+## Registered comparison arms
+
+```bash
+uv run python ../scripts/run_robustness_suite.py --arms b3 seeds multi_output
+uv run python ../scripts/run_matched_fpr_sweep.py       # RQ2 operating curves
+uv run python ../scripts/run_sensitivity_suite.py       # M-27 provisional sweep
+```
+
+`b3` is the fleet-median-only detector with **no NBM at all** — the first-order
+check on whether the model earns its place. `seeds` measures whether the
+XGBoost margin exceeds seed noise. `multi_output` is the PROJECT.md §18
+per-target ablation. Each is a declared arm reported alongside the headline,
+never a replacement for it.
+
+Both completed arms returned results that complicate the thesis's claims, and
+both are reported first-class rather than in a caveat (ADR-046):
+
+- **B3** — the no-model baseline is comparable to the NBM throughout and
+  **better on the gearbox oil target** (residual σ 2.255 vs 2.578 °C). The
+  NBM's contribution over a trivial baseline is not established by detection
+  behaviour (LIM-031).
+- **A8** — multi-output and one-model-per-target are indistinguishable
+  (2.1647 vs 2.1611 bearing; 2.6904 vs 2.7155 oil), so the headline
+  architectural choice buys no accuracy (LIM-032).
+- **A9** — the XGBoost margin over the linear baseline **survives**: seed
+  spread 0.0051 / 0.0115 °C against margins of 0.4007 / 0.2310 °C, i.e. 79×
+  and 20×. The RQ1 accuracy claim is not a seed artefact.
+
+Together they narrow the defensible contribution claim: XGBoost is genuinely
+more accurate than the linear reference, that advantage does not come from the
+multi-target architecture, and it does not translate into better detection than
+a no-model fleet baseline.
+
 ## Status
 
 Modules **M-01…M-31 complete**: core, data layer, models (XGBoost THESIS +
-linear BASELINE per ADR-002), residuals, detection, FMEA, evaluation, and
-experiment management including `reproduce`. Not started: M-32 (FastAPI),
-M-33 (dashboard), M-34 (exports) — out of scope for the research instrument.
+OLS and Elastic Net BASELINE per ADR-002/ADR-032), residuals, detection, FMEA,
+evaluation, and experiment management including `reproduce`. Not started:
+M-32 (FastAPI), M-33 (dashboard), M-34 (exports) — out of scope for the
+research instrument.
 
 Phase 0.5 dataset due-diligence gate **APPROVED 2026-08-12** (ADR-015); see
 [`docs/DATASET_DUE_DILIGENCE.md`](docs/DATASET_DUE_DILIGENCE.md). Decisions
-ADR-001…ADR-027 recorded; queue Groups A and B closed, Group C (D-08…D-14)
-open. Four experiments have been run; artifacts are excluded from git by
-design (PROJECT.md §15).
+ADR-001…ADR-045 recorded; queue Groups A and B closed, **Group C (D-08…D-14)
+open — four of them High viva risk (D-08, D-09, D-10, D-11), so the queue's
+own stop condition is not yet met.** Artifacts are excluded from git by design
+(PROJECT.md §15), which means a deleted experiment leaves only its prose:
+regenerate and retain every cited run before submission.
 
 Current methodological review and the frozen experiment protocol:
 [`docs/METHODOLOGY_REVIEW.md`](docs/METHODOLOGY_REVIEW.md) ·
 [`docs/EXPERIMENT_PROTOCOL.md`](docs/EXPERIMENT_PROTOCOL.md).
+
+### Known open items an examiner will ask about
+
+These are recorded here rather than only in the registers, because a reader
+starts at the README:
+
+- **RQ2 is not currently citable.** ADR-028 unified the false-alarm denominator
+  on row-time and `docs/EXPERIMENT_PROTOCOL.md` §6 marks that correction
+  blocking for any cited result. The sweep has not been re-run under it.
+- **ADR-042 and ADR-034 are PROPOSED**, so the EWMA control limits remain
+  empirically calibrated quantile knobs (ADR-026), not control limits.
+- **LIM-026**: the single labelled event's matched detection is a cold-side
+  excursion on a hot-side fault mode.
+- **LIM-029**: monitoring-period residual dispersion grows ~2.5x from 2019 to
+  2021 on every turbine — model ageing, not gearbox condition.
+- **LIM-030**: at the measured cross-target residual correlation (r ≈ 0.95) the
+  FMEA rule base cannot discriminate between mechanisms.
+- **LIM-031**: a fleet-median-only detector with no model matches the NBM, and
+  beats it on the oil target.
+- **LIM-032**: the multi-target architecture contributes no measurable accuracy
+  over per-target modelling.

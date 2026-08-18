@@ -326,6 +326,42 @@ class TestMetrics:
         assert metrics.r2 == pytest.approx(0.0)
         assert metrics.bias == pytest.approx(0.0)
 
+    def test_bias_is_the_mean_residual_not_its_negation(self):
+        """ADR-036: bias = mean(actual - predicted) (PROJECT.md §21).
+
+        The regression this pins: ``metrics.py`` computed mean(predicted -
+        actual) while the run script's bootstrap computed mean(actual -
+        predicted), so EXP-20260817-001 shipped +2.1829 and -2.1829 for the
+        same quantity in two of its own artifacts.
+        """
+        actual = pd.Series([10.0, 10.0, 10.0])
+        predicted = pd.Series([8.0, 8.0, 8.0])  # model UNDER-predicts by 2
+        assert compute_metrics(actual, predicted).bias == pytest.approx(2.0)
+
+    def test_metrics_bias_agrees_with_the_residual_engine(self):
+        """The two error paths that disagreed must now agree exactly.
+
+        ``compute_metrics`` (models layer) and ``compute_residuals``
+        (residual engine) are the only two places an error signal is formed.
+        """
+        from app.residuals.engine import RAW_RESIDUAL_COLUMN, compute_residuals
+
+        X, y = _frames()
+        model = LinearRegressionNBM()
+        model.fit(X, y, seed=42)
+        predictions = model.predict(X)
+
+        frame = y.copy()
+        frame[SCHEMA.timestamp_name] = pd.date_range(
+            "2020-01-01", periods=len(frame), freq="10min", tz="UTC"
+        )
+        frame[SCHEMA.turbine_id_name] = "T1"
+        residuals = compute_residuals(frame, predictions, SCHEMA, TARGETS)
+
+        engine_bias = residuals.data.groupby("target")[RAW_RESIDUAL_COLUMN].mean().to_dict()
+        for target, metrics in compute_per_target(y, predictions).items():
+            assert metrics.bias == pytest.approx(engine_bias[target])
+
     def test_metric_set_exposes_exactly_four_fields(self):
         """M-18: MetricSet is exactly {rmse, mae, r2, bias} — no MAPE."""
         from dataclasses import fields
@@ -373,7 +409,10 @@ class TestMetrics:
         sliced = condition_sliced(actual, predicted, condition, bins=2)
         assert sliced["n"].sum() == 4
         assert len(sliced) == 2
-        assert sliced.iloc[0]["bias"] == pytest.approx(0.25)
+        # ADR-036 flipped the bias sign to the §21 residual convention. In the
+        # low bin the model over-predicts by 0.5 and 0.0, so the mean residual
+        # (actual - predicted) is -0.25.
+        assert sliced.iloc[0]["bias"] == pytest.approx(-0.25)
 
     def test_condition_diagnostics_covers_supplied_variables(self):
         """M-18 acceptance 2: power/wind/ambient slices (§20)."""

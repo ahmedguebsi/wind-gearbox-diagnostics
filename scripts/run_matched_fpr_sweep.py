@@ -236,13 +236,18 @@ def slice_rate(
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--experiment", default="EXP-20260813-002")
+    # Defaults corrected 2026-08-18 (ADR-044 housekeeping): --experiment named
+    # a run whose artifacts have since been deleted, and --downloads pointed at
+    # a different machine's Downloads directory, so this script could not run
+    # anywhere but its author's workstation.
+    parser.add_argument("--experiment", default=None)
     parser.add_argument("--artifacts", type=Path, default=REPO_ROOT / "artifacts")
-    parser.add_argument(
-        "--downloads", type=Path, default=Path(r"C:\Users\mokhles.khedhri.993\Downloads")
-    )
+    parser.add_argument("--downloads", type=Path, default=REPO_ROOT / "dataset")
     args = parser.parse_args()
-    directory = args.artifacts / args.experiment
+    experiment = (
+        args.experiment or sorted(p.name for p in args.artifacts.glob("EXP-*") if p.is_dir())[-1]
+    )
+    directory = args.artifacts / experiment
     if not directory.is_dir():
         raise SystemExit(f"Experiment directory not found: {directory}")
 
@@ -511,7 +516,7 @@ def main() -> int:
         }
 
     payload = {
-        "experiment_id": args.experiment,
+        "experiment_id": experiment,
         "created_at_utc": datetime.now(UTC).isoformat(),
         "design": {
             "approved_by": "author, 2026-08-13 (ADR-016 Operationalisation block)",

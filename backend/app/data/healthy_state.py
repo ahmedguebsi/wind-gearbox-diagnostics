@@ -44,6 +44,18 @@ EXCLUSION_PRIORITY: tuple[str, ...] = (
     "below_minimum_active_power",
 )
 
+#: Exclusion reasons Guard 5 polices (PROJECT.md §33 Guard 5).
+#:
+#: ADR-041. Guard 5 originally inspected ``known_fault_period`` alone. No
+#: caller ever constructs one — this dataset has no maintenance-confirmed
+#: failures (LIM-002/ADR-013), so the designated failure episode is carried as
+#: an ``author_designated_event_span`` manual window under ADR-024 instead.
+#: The guard was therefore structurally dead on every real run, reporting an
+#: empty findings list that read as "no known failure reached the healthy
+#: set" when in fact nothing had been checked. A designated event span IS a
+#: known failure interval for this purpose, whatever mechanism carries it.
+GUARD5_REASONS: tuple[str, ...] = ("known_fault_period", "author_designated_event_span")
+
 
 @dataclass(frozen=True)
 class ExclusionWindow:
@@ -214,17 +226,33 @@ class HealthyStateBuilder:
         # turbine identifier matches no observation excludes nothing, and
         # without this warning the failure period would sit in training with
         # no indication that the exclusion did nothing.
-        for window in [w for w in windows if w.reason == "known_fault_period"]:
-            if matched_rows.get(id(window), 0) == 0:
+        frame_stamps = frame[timestamp].dropna()
+        span_start: pd.Timestamp | None = None if frame_stamps.empty else frame_stamps.min()
+        span_end: pd.Timestamp | None = None if frame_stamps.empty else frame_stamps.max()
+        for window in [w for w in windows if w.reason in GUARD5_REASONS]:
+            # "Matched nothing" is only evidence of a misconfiguration when the
+            # window's period overlaps the frame's at all. Without this scoping
+            # the guard would fire on every run for the ADR-024 EVENT-001 span,
+            # which lies wholly inside the monitoring period and is correctly
+            # absent from the pre-monitoring build.
+            overlaps_span = (
+                span_start is not None
+                and span_end is not None
+                and window.start_utc <= span_end
+                and window.end_utc >= span_start
+            )
+            if overlaps_span and matched_rows.get(id(window), 0) == 0:
                 findings.append(
                     Finding(
                         Level.WARNING,
                         "GUARD5.WINDOW_MATCHED_NOTHING",
-                        "Known failure window excluded no observations; check the turbine "
-                        "identifier and window bounds — the exclusion had no effect",
+                        "Known failure window overlaps this period but excluded no "
+                        "observations; check the turbine identifier and window bounds "
+                        "— the exclusion had no effect",
                         0,
                         {
                             "turbine": window.turbine,
+                            "reason": window.reason,
                             "start": window.start_utc.isoformat(),
                             "end": window.end_utc.isoformat(),
                         },
@@ -242,7 +270,11 @@ class HealthyStateBuilder:
                         "GUARD5.FAILURE_IN_HEALTHY",
                         "Known failure interval overlaps the healthy population",
                         int(overlap.sum()),
-                        {"turbine": window.turbine, "start": window.start_utc.isoformat()},
+                        {
+                            "turbine": window.turbine,
+                            "reason": window.reason,
+                            "start": window.start_utc.isoformat(),
+                        },
                     )
                 )
 

@@ -20,6 +20,11 @@ EXPECTED_PROVISIONAL = sorted(
     [
         "detection.control_limit_sigma",
         "detection.ewma_lambda",
+        # ADR-042: whether the EWMA recursion carries its memory across
+        # exclusion gaps. The healthy partitions that supply the in-control
+        # characterisation and the control limits are gap-filled, so this is
+        # a live question about exactly those numbers (added 2026-08-18).
+        "detection.gap_handling",
         "detection.persistence_min_samples",
         "evaluation.event_match_window_days",
         "healthy_state.exclude_step_changes",

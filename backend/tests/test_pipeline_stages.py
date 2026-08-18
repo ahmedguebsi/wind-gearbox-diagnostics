@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.core.config import HealthyStateConfig
+from app.core.config import HealthyStateConfig, ManualExclusionWindow
 from app.core.errors import ConfigError, SplitPolicyError
 from app.data.cleaning import OPERATION_REGISTRY, clean
 from app.data.healthy_state import (
@@ -295,6 +295,76 @@ class TestHealthyState:
         )
         _, report = builder.build(make_dataset(frame), fault_windows=[mismatched])
         assert any(f.rule_id == "GUARD5.WINDOW_MATCHED_NOTHING" for f in report.findings)
+
+    def test_guard5_covers_author_designated_event_spans(self):
+        """ADR-041: Guard 5 was structurally dead on the real dataset.
+
+        It inspected ``known_fault_period`` only, and no caller constructs one
+        — this dataset has no maintenance-confirmed failures (LIM-002), so the
+        designated failure episode is carried as an ADR-024
+        ``author_designated_event_span`` manual window. Every real run
+        therefore reported ``findings: []``, which read as "no known failure
+        reached the healthy set" when nothing had been checked.
+        """
+        frame = synthetic_frame(days=5, turbine="Kelmarsh 1")
+        span = ManualExclusionWindow(
+            label="EVENT-001-episode-span",
+            turbine="KELMARSH_01",  # identifier mismatch: exclusion does nothing
+            start_utc=frame["timestamp"].iloc[10].to_pydatetime(),
+            end_utc=frame["timestamp"].iloc[20].to_pydatetime(),
+            citation="ADR-013 via ADR-024",
+            reason="author_designated_event_span",
+        )
+        builder = HealthyStateBuilder(
+            HealthyStateConfig(minimum_active_power_kw=-1e9, manual_exclusion_windows=(span,)),
+            default_schema(),
+        )
+        _, report = builder.build(make_dataset(frame))
+        assert any(f.rule_id == "GUARD5.WINDOW_MATCHED_NOTHING" for f in report.findings)
+
+    def test_guard5_does_not_warn_for_a_window_outside_this_period(self):
+        """ADR-041 scoping. The EVENT-001 span lies wholly inside the
+        monitoring period, so it correctly matches nothing during the
+        pre-monitoring healthy build. Warning there would fire on every run
+        and train the reader to ignore the guard."""
+        frame = synthetic_frame(days=5, turbine="Kelmarsh 1")
+        far_future = ManualExclusionWindow(
+            label="EVENT-001-episode-span",
+            turbine="Kelmarsh 1",
+            start_utc=(frame["timestamp"].iloc[-1] + timedelta(days=30)).to_pydatetime(),
+            end_utc=(frame["timestamp"].iloc[-1] + timedelta(days=60)).to_pydatetime(),
+            citation="ADR-013 via ADR-024",
+            reason="author_designated_event_span",
+        )
+        builder = HealthyStateBuilder(
+            HealthyStateConfig(
+                minimum_active_power_kw=-1e9, manual_exclusion_windows=(far_future,)
+            ),
+            default_schema(),
+        )
+        _, report = builder.build(make_dataset(frame))
+        assert report.findings == []
+
+    def test_guard5_flags_a_designated_event_span_left_in_the_healthy_set(self):
+        """The substantive check: a designated failure episode overlapping the
+        accepted population is reported, not silently trained on."""
+        frame = synthetic_frame(days=5, turbine="Kelmarsh 1")
+        builder = HealthyStateBuilder(
+            HealthyStateConfig(minimum_active_power_kw=-1e9, fault_pre_exclusion_days=0),
+            default_schema(),
+        )
+        overlapping = ExclusionWindow(
+            "Kelmarsh 1",
+            frame["timestamp"].iloc[10],
+            frame["timestamp"].iloc[20],
+            "author_designated_event_span",
+        )
+        _, report = builder.build(make_dataset(frame), fault_windows=[overlapping])
+        # The span IS excluded, so no failure survives into the healthy
+        # population and Guard 5 stays silent — the correct outcome, now
+        # actually verified rather than vacuously true.
+        assert not any(f.rule_id == "GUARD5.FAILURE_IN_HEALTHY" for f in report.findings)
+        assert report.exclusion_counts["author_designated_event_span"] == 11
 
     def test_guard5_silent_when_window_applies_correctly(self):
         frame = synthetic_frame(days=5, turbine="Kelmarsh 1")

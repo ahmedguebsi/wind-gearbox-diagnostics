@@ -39,7 +39,7 @@ from app.core.config import (
 )
 from app.core.errors import ConfigError
 from app.core.limitations import append_limitation
-from app.core.logging import experiment_logging, get_logger
+from app.core.logging import buffered_logs, experiment_logging, get_logger
 from app.core.time import utc_now
 from app.core.versioning import capture_version_stamp
 from app.data.cleaning import CleaningAudit, clean, impossible_predictor_rows
@@ -47,7 +47,12 @@ from app.data.guards import FeatureConfig, validate_feature_configuration
 from app.data.healthy_state import ExclusionWindow, HealthyStateBuilder, HealthyStateReport
 from app.data.ingestion import CanonicalDataset, ingest_files
 from app.data.mapping import ColumnMapping
-from app.data.schema import CanonicalSchema
+from app.data.schema import (
+    ACTIVE_POWER,
+    AMBIENT_TEMPERATURE,
+    WIND_SPEED,
+    CanonicalSchema,
+)
 from app.data.splitting import (
     ExperimentFlags,
     Split,
@@ -70,6 +75,7 @@ from app.experiments.tracker import (
     ExperimentRecord,
     GuardAttestations,
     ModelMetadata,
+    MultipleComparisonRegister,
     SplitMetadata,
 )
 from app.models.base import (
@@ -79,13 +85,14 @@ from app.models.base import (
     fit_model,
     tune_model,
 )
-from app.models.metrics import compute_per_target
+from app.models.metrics import compute_per_target, condition_diagnostics
 from app.models.registry import create as create_model
 from app.residuals.engine import ResidualFrame, compute_residuals
 from app.residuals.ewma import (
     ControlLimitFormulation,
     ControlLimitSpec,
     EwmaDetector,
+    GapHandling,
     InControlReport,
 )
 from app.residuals.fleet import fleet_relative_residuals
@@ -144,6 +151,8 @@ class PipelineResult:
     metrics: dict[str, Any]
     #: Descriptive residual diagnostics per partition (read-only).
     residual_diagnostics: dict[str, Any] = field(default_factory=dict)
+    #: PROJECT.md §20 condition-sliced error tables (read-only).
+    condition_diagnostics: dict[str, Any] = field(default_factory=dict)
 
 
 def _cleaning_metrics(
@@ -173,6 +182,33 @@ def _cleaning_metrics(
     metrics["impossible_predictor_rows_dropped_total"] = int(mask.sum())
     metrics["impossible_predictor_rows_dropped_by_partition"] = counts
     return metrics
+
+
+def assert_reproducible_code_state(schema_version: str, *, allow_dirty: bool = False) -> None:
+    """ADR-044: a citable run needs a recoverable code state.
+
+    ``metadata.json`` records the git commit so a result can be regenerated
+    from the code that produced it. When the working tree is dirty that
+    promise is void — the commit names code that is not what ran, and the
+    difference is unrecorded. EXP-20260817-001, the RQ1 headline, carries
+    ``git_dirty: true``.
+
+    Called by the run DRIVERS rather than by the pipeline, because that is
+    where the intent to produce a citable result is declared (the Kelmarsh
+    script already refuses to start without ``--approved-by``). Putting it in
+    the library would also block the in-memory sweeps and the test suite,
+    neither of which produces a thesis artifact.
+    """
+    if allow_dirty:
+        return
+    stamp = capture_version_stamp(schema_version=schema_version)
+    if stamp.git_dirty:
+        raise SystemExit(
+            "REFUSING TO RUN: the working tree is dirty, so this run could not "
+            "be reproduced from the commit its metadata would record "
+            f"({stamp.git_commit[:10]}; PROJECT.md §15). Commit or stash the "
+            "changes, or pass --allow-dirty for an explicitly exploratory run."
+        )
 
 
 def run_pipeline(config: AppConfig, inputs: PipelineInputs) -> PipelineResult:
@@ -299,6 +335,7 @@ def run_pipeline(config: AppConfig, inputs: PipelineInputs) -> PipelineResult:
         "detection": detection_metrics,
         "residual_diagnostics": _residual_diagnostics_summary(residual_diagnostics),
     }
+    condition_tables = _condition_diagnostics(inputs, metrics_partitions, predictions, list(models))
     return PipelineResult(
         cleaned=cleaned,
         healthy=healthy,
@@ -314,6 +351,7 @@ def run_pipeline(config: AppConfig, inputs: PipelineInputs) -> PipelineResult:
         in_control=in_control,
         metrics=metrics,
         residual_diagnostics=residual_diagnostics,
+        condition_diagnostics=condition_tables,
     )
 
 
@@ -437,7 +475,7 @@ def _fit_and_predict(
         elastic = models.get("elastic_net")
         elastic_tuning = config.model.elastic_net_tuning
         if elastic is not None and elastic_tuning.enabled:
-            fit_reports["elastic_net"] = tune_model(
+            elastic_tuning_report = tune_model(
                 elastic,
                 inner_fit,
                 inner_score,
@@ -449,8 +487,18 @@ def _fit_and_predict(
                 baseline_validation_rmse=baseline_rmse,
                 early_stopping_rounds=None,
             )
+            # The tuning record survives the refit because it is model state,
+            # not report state (verified: ElasticNetNBM._fit_report reads
+            # self._tuning_*). Binding the search report to a name anyway, and
+            # asserting the refit preserved it, keeps that guarantee explicit
+            # rather than incidental — the double assignment previously here
+            # read as a lost write.
             fit_reports["elastic_net"] = fit_model(
                 elastic, partitions["training"], inputs.feature, inputs.schema, seed=seed
+            )
+            assert (
+                fit_reports["elastic_net"].tuning_configurations_evaluated
+                == elastic_tuning_report.tuning_configurations_evaluated
             )
             for partition, frame in partitions.items():
                 if partition == "training":
@@ -505,6 +553,7 @@ def _residual_stages(
             sigma_multiplier=config.detection.control_limit_sigma,
             formulation=ControlLimitFormulation(config.detection.control_limit_formulation),
         ),
+        gap_handling=GapHandling(config.detection.gap_handling),
     )
     detector.fit_control_limits(normalized[source_partition], source)
     in_control = detector.characterize_in_control(normalized["validation"])
@@ -519,6 +568,57 @@ def _residual_stages(
         "test_exceedance_points": sum(int((d.states != 0).sum()) for d in test_detections),
     }
     return normalized, dict(normalizer.fitted_stats()), in_control, detection_metrics
+
+
+#: PROJECT.md §20 condition variables. The ambient slice doubles as the
+#: seasonal-shift diagnostic and is the mitigation LIM-013 names.
+CONDITION_VARIABLES: tuple[str, ...] = (ACTIVE_POWER, WIND_SPEED, AMBIENT_TEMPERATURE)
+
+
+def _condition_diagnostics(
+    inputs: PipelineInputs,
+    partitions: dict[str, pd.DataFrame],
+    predictions: dict[str, pd.DataFrame],
+    model_keys: Sequence[str],
+) -> dict[str, Any]:
+    """PROJECT.md §20 condition-sliced error diagnostics.
+
+    Mandated by the specification, implemented in M-18, and — until now —
+    never invoked outside the test suite: ``condition_diagnostics`` had no
+    production caller, so no experiment ever produced them. They matter for
+    three specific reasons, not as decoration:
+
+    1. They are the heteroscedasticity evidence the §22 normalization design
+       is supposed to rest on, and the evidence decision D-12 (condition-binned
+       normalization) is blocked on.
+    2. The ambient slice is the named mitigation for LIM-013 — whether the
+       model's error grows where it extrapolates beyond its training range.
+    3. §20 states the purpose plainly: "We need to know whether model error
+       changes by operating condition."
+
+    Computed on the out-of-sample partitions only, per model and target.
+    """
+    targets = list(inputs.feature.targets)
+    output: dict[str, Any] = {}
+    for partition, frame in partitions.items():
+        if partition == "training":
+            continue
+        conditions = [c for c in CONDITION_VARIABLES if c in frame.columns]
+        if not conditions:
+            continue
+        for model_key in model_keys:
+            key = f"{model_key}_{partition}"
+            if key not in predictions:
+                continue
+            for target in targets:
+                tables = condition_diagnostics(
+                    frame[target], predictions[key][target], frame[conditions]
+                )
+                output.setdefault(partition, {}).setdefault(model_key, {})[target] = {
+                    condition: table.to_dict(orient="records")
+                    for condition, table in tables.items()
+                }
+    return output
 
 
 def _residual_diagnostics(residuals: dict[str, ResidualFrame]) -> dict[str, Any]:
@@ -649,13 +749,17 @@ def run_experiment(
     """Run the pipeline, then persist the complete artifact set (M-29/M-30).
 
     The pipeline runs entirely in memory first; only a successful run touches
-    the artifact root, so failures leave no partial experiment behind.
+    the artifact root, so failures leave no partial experiment behind. Logs
+    from that phase are buffered and replayed into the experiment's run.log
+    once the directory exists (ADR-043) — previously they were lost, and the
+    stored log held only the persistence phase.
     """
-    result = run_pipeline(config, inputs)
+    with buffered_logs() as buffered:
+        result = run_pipeline(config, inputs)
 
     experiment_id = store.new_experiment_id()
     directory = store.create_layout(experiment_id)
-    with experiment_logging(experiment_id, directory):
+    with experiment_logging(experiment_id, directory, replay=buffered):
         _logger.info("Persisting experiment %s", experiment_id)
         record = _build_record(experiment_id, config, inputs, result)
         store.persist(record, config, result.metrics)
@@ -665,16 +769,43 @@ def run_experiment(
         store.write_report(experiment_id, "split", _split_dict(result.split))
         store.write_report(experiment_id, "normalizer_stats", result.normalizer_stats)
         store.write_report(experiment_id, "residual_diagnostics", result.residual_diagnostics)
+        store.write_report(experiment_id, "condition_diagnostics", result.condition_diagnostics)
         for key, model in result.models.items():
             model.save(directory / "model" / key)
         for key, frame in result.predictions.items():
             frame.to_parquet(directory / "predictions" / f"{key}.parquet")
         for partition, residual_frame in result.residuals.items():
             residual_frame.data.to_parquet(directory / "residuals" / f"{partition}.parquet")
+        _persist_conditions(directory, inputs, result)
         if result.in_control is not None:
             store.write_report(experiment_id, "in_control_report", result.in_control.as_dict())
             _record_inflation(experiment_id, result.in_control, inputs.limitations_path)
     return experiment_id, result
+
+
+def _persist_conditions(directory: Path, inputs: PipelineInputs, result: PipelineResult) -> None:
+    """The §20 condition variables for the monitoring partition, keyed like the
+    residual frame.
+
+    The residual frame deliberately carries no predictor columns (M-19a keeps
+    it minimal and raw-write-once). Persisting the three §20 conditions beside
+    it is what lets the diagnostic figures be regenerated from artifacts alone
+    — in seconds, rather than by re-running the pipeline — while guaranteeing
+    a figure and the metric beside it describe the same rows.
+    """
+    frame = result.cleaned.frame.loc[result.split.test]
+    keys = [inputs.schema.timestamp_name, inputs.schema.turbine_id_name]
+    columns = keys + [c for c in CONDITION_VARIABLES if c in frame.columns]
+    conditions = frame[columns].rename(
+        columns={
+            inputs.schema.timestamp_name: "timestamp",
+            inputs.schema.turbine_id_name: "turbine_id",
+        }
+    )
+    # NOT under predictions/: `reproduce` requires exact frame equality over
+    # every stored prediction, and a non-prediction file there is diffed as a
+    # missing prediction.
+    conditions.to_parquet(directory / "evaluation" / "conditions.parquet", index=False)
 
 
 def _record_inflation(
@@ -748,13 +879,41 @@ def _build_record(
             tuning_configurations_evaluated=thesis_report.tuning_configurations_evaluated,
             tuning_trials=thesis_report.tuning_trials,
         ),
-        seeds={"model": config.model.seed, **dict(inputs.seeds or {})},
+        multiple_comparison_register=_multiple_comparison_register(result.fit_reports),
+        # PROJECT.md §15: a seed per stochastic component, not one global seed.
+        # ``model`` covers the XGBoost fit and its row subsampling; ``bootstrap``
+        # covers the moving-block resampling that produces every reported CI.
+        seeds={
+            "model": config.model.seed,
+            "bootstrap": config.evaluation.bootstrap_seed,
+            **dict(inputs.seeds or {}),
+        },
         environment=capture_version_stamp(schema_version=inputs.schema.schema_version),
         guards=GuardAttestations(
             validated=PIPELINE_GUARDS,
             threshold_stats_source=config.residual.threshold_stats_source.value,
         ),
         flags=ExperimentFlagsRecord(thesis_official=inputs.flags.thesis_official),
+    )
+
+
+def _multiple_comparison_register(
+    fit_reports: dict[str, FitReport],
+) -> MultipleComparisonRegister:
+    """Total configurations scored across every tuned model (PROJECT.md §18).
+
+    ADR-039: the register previously carried only the thesis model's count, so
+    a run that scored 12 XGBoost candidates and 9 Elastic Net candidates
+    recorded 12. The guard exists to make the search surface visible, and a
+    count that omits a whole model's search does not do that.
+    """
+    per_model = {
+        key: report.tuning_configurations_evaluated for key, report in sorted(fit_reports.items())
+    }
+    return MultipleComparisonRegister(
+        per_model=per_model,
+        total_configurations_evaluated=sum(per_model.values()),
+        untuned_models=tuple(key for key, count in per_model.items() if count == 0),
     )
 
 

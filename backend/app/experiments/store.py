@@ -133,7 +133,8 @@ class ArtifactStore:
         path = self.experiment_dir(experiment_id) / METADATA_FILENAME
         if not path.is_file():
             raise ConfigError("Experiment metadata not found", experiment_id=experiment_id)
-        return ExperimentRecord.model_validate(json.loads(path.read_text(encoding="utf-8")))
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return ExperimentRecord.model_validate(_upgrade_legacy_payload(payload))
 
     def load_metrics(self, experiment_id: str) -> dict[str, Any]:
         path = self.experiment_dir(experiment_id) / METRICS_FILENAME
@@ -161,3 +162,33 @@ class ArtifactStore:
             self._register(record, self.experiment_dir(experiment_id))
             count += 1
         return count
+
+
+#: Metadata schema migrations for records written before a field existed.
+#:
+#: Experiment records are permanent evidence: a run from three weeks ago must
+#: stay loadable, and `reproduce` must keep working on it, or the artifact
+#: retention the thesis depends on is worthless. But the M-29 contract is that
+#: every PROJECT.md §15 field is REQUIRED — a record missing one cannot be
+#: constructed — so a Pydantic default would weaken the contract for new
+#: records in order to accommodate old ones.
+#:
+#: Migrating on load keeps both: the model stays strict, and legacy payloads
+#: are upgraded here with an explicit marker saying the field was not recorded
+#: rather than a value pretending it was. Caught by running `reproduce` against
+#: the pre-ADR-039 headline experiment, which is what that command is for.
+def _upgrade_legacy_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Fill fields added after this record was written, marked as unrecorded."""
+    if "multiple_comparison_register" not in payload:
+        # Pre-ADR-039: only the thesis model's count was kept, in `model`.
+        thesis_count = int(payload.get("model", {}).get("tuning_configurations_evaluated", 0))
+        payload = {
+            **payload,
+            "multiple_comparison_register": {
+                "per_model": {"thesis": thesis_count},
+                "total_configurations_evaluated": thesis_count,
+                "untuned_models": (),
+                "recorded_before_adr_039": True,
+            },
+        }
+    return payload

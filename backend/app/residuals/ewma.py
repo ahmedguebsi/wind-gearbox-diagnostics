@@ -14,7 +14,7 @@ the detector joins the pipeline.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
@@ -88,6 +88,10 @@ class InControlReport:
     theoretical_rate: float
     inflation_ratio: float
     material_inflation_threshold: float
+    #: Discontinuity statistics of the stream this was measured on (ADR-042).
+    #: The in-control block is gap-filled by healthy-state exclusion, so the
+    #: rate below is measured on a series whose EWMA memory crossed those gaps.
+    gap_census: dict[str, Any] = field(default_factory=dict)
 
     @property
     def materially_inflated(self) -> bool:
@@ -102,6 +106,7 @@ class InControlReport:
             "inflation_ratio": self.inflation_ratio,
             "material_inflation_threshold": self.material_inflation_threshold,
             "materially_inflated": self.materially_inflated,
+            "gap_census": dict(self.gap_census),
         }
 
     def limitations_entry(self) -> str | None:
@@ -122,14 +127,52 @@ def _gaussian_two_sided_rate(multiplier: float) -> float:
     return float(2.0 * (1.0 - 0.5 * (1.0 + math.erf(multiplier / math.sqrt(2.0)))))
 
 
-def ewma_recursion(values: np.ndarray, lam: float) -> np.ndarray:
-    """z_t = lam * x_t + (1 - lam) * z_(t-1), z_0 = 0 (normalized residuals)."""
+def ewma_recursion(values: np.ndarray, lam: float, restart: np.ndarray | None = None) -> np.ndarray:
+    """z_t = lam * x_t + (1 - lam) * z_(t-1), z_0 = 0 (normalized residuals).
+
+    ``restart`` optionally marks samples at which the recursion restarts from
+    z = 0 — the segment boundaries of :class:`GapHandling.RESET`. Normalized
+    residuals are centred on zero, so zero is the natural restart state.
+    """
     smoothed = np.empty(len(values), dtype=float)
     previous = 0.0
     for i, x in enumerate(values):
+        if restart is not None and restart[i]:
+            previous = 0.0
         previous = lam * x + (1.0 - lam) * previous
         smoothed[i] = previous
     return smoothed
+
+
+class GapHandling(StrEnum):
+    """How the EWMA recursion treats discontinuities in a stream.
+
+    OPEN METHODOLOGICAL POINT (ADR-042, PROPOSED — the author closes it).
+
+    CONTINUOUS is the behaviour every stored result was produced under and
+    remains the default, so no recorded number moves without a ruling. It
+    carries the recursion across gaps as though consecutive rows were ten
+    minutes apart. On the TEST partition that is exact — the monitoring stream
+    is unfiltered and contiguous. On the HEALTHY partitions it is not: alarm
+    windows and the power floor remove roughly a quarter of the rows, so the
+    memory of the EWMA is carried across gaps of hours or days, and it is
+    those partitions that supply the in-control characterisation and the
+    control limits.
+
+    The project already knows this asymmetry matters — ``contiguous_lag1`` in
+    ``scripts/diagnose_residual_dependence.py`` exists precisely because "a
+    naive shift would pair rows that are hours apart and understate the
+    dependence" — but the correction was applied to the diagnostic and not to
+    the detector it diagnoses.
+
+    RESET restarts the recursion at each discontinuity. It is not a free
+    improvement: restarting at z = 0 reintroduces the start-up transient at
+    every segment boundary, where the steady-state limit is too wide, so a
+    RESET run should be read with the time-varying limit formulation.
+    """
+
+    CONTINUOUS = "continuous"
+    RESET = "reset"
 
 
 class EwmaDetector:
@@ -141,6 +184,7 @@ class EwmaDetector:
         spec: ControlLimitSpec,
         *,
         material_inflation_threshold: float = 2.0,
+        gap_handling: GapHandling = GapHandling.CONTINUOUS,
     ) -> None:
         if not 0.0 < lam <= 1.0:
             raise ConfigError("EWMA lambda must be in (0, 1]", lam=lam)
@@ -149,8 +193,41 @@ class EwmaDetector:
         self.lam = lam
         self.spec = spec
         self.material_inflation_threshold = material_inflation_threshold
+        self.gap_handling = gap_handling
         self._sigma: dict[str, float] = {}
         self._source: PartitionRef | None = None
+        self._last_gap_census: dict[str, Any] = {}
+
+    @staticmethod
+    def _restart_mask(timestamps: pd.Series, values: np.ndarray) -> np.ndarray:
+        """Samples that begin a new contiguous segment.
+
+        A gap is any step longer than the stream's own modal sampling
+        interval. A missing residual also breaks the segment: carrying the
+        recursion through a value that does not exist is what
+        ``np.nan_to_num`` silently did, charting an absent observation as
+        perfectly normal.
+        """
+        restart = np.zeros(len(values), dtype=bool)
+        if len(values) == 0:
+            return restart
+        restart[0] = True
+        steps = timestamps.diff()
+        modal: pd.Timedelta = pd.Timedelta(steps.median())
+        if pd.notna(modal) and modal > pd.Timedelta(0):
+            restart |= (steps > modal).to_numpy(dtype=bool, na_value=False)
+        missing = np.isnan(values)
+        restart |= np.concatenate([[False], missing[:-1]])
+        return restart
+
+    def gap_census(self) -> dict[str, Any]:
+        """Discontinuity statistics from the most recent :meth:`detect`.
+
+        Reported whichever branch is active, so the size of the ADR-042
+        question is visible on a CONTINUOUS run rather than only on a run that
+        already decided to do something about it.
+        """
+        return dict(self._last_gap_census)
 
     @property
     def source(self) -> PartitionRef:
@@ -194,6 +271,8 @@ class EwmaDetector:
             raise ConfigError("Residuals are not normalized; EWMA runs on normalized residuals")
         ewma_series: list[EwmaSeries] = []
         detections: list[DetectionSeries] = []
+        segments = 0
+        samples = 0
         for (turbine, target), group in frame.groupby(
             [TURBINE_COLUMN, TARGET_COLUMN], observed=True
         ):
@@ -202,7 +281,14 @@ class EwmaDetector:
                 raise ConfigError("Control limits were not fitted for target", target=key)
             ordered = group.sort_values(TIMESTAMP_COLUMN)
             values = ordered[NORMALIZED_RESIDUAL_COLUMN].to_numpy(dtype=float)
-            smoothed = ewma_recursion(np.nan_to_num(values, nan=0.0), self.lam)
+            restart = self._restart_mask(ordered[TIMESTAMP_COLUMN], values)
+            segments += int(restart.sum())
+            samples += len(values)
+            smoothed = ewma_recursion(
+                np.nan_to_num(values, nan=0.0),
+                self.lam,
+                restart=restart if self.gap_handling is GapHandling.RESET else None,
+            )
             limits = self._limit_profile(self._sigma[key], len(smoothed))
             states = np.zeros(len(smoothed), dtype=int)
             states[smoothed > limits] = 1
@@ -229,6 +315,19 @@ class EwmaDetector:
                     method_label=PRIMARY_EWMA_LABEL,
                 )
             )
+        n_streams = len(detections)
+        self._last_gap_census = {
+            "gap_handling": self.gap_handling.value,
+            "n_streams": n_streams,
+            "n_samples": samples,
+            "n_segments": segments,
+            "n_discontinuities": max(segments - n_streams, 0),
+            "mean_segment_length": round(samples / segments, 3) if segments else None,
+            "note": (
+                "Under CONTINUOUS the EWMA memory is carried across every "
+                "discontinuity as though the rows were adjacent (ADR-042)."
+            ),
+        }
         return ewma_series, detections
 
     def characterize_in_control(self, healthy_validation: ResidualFrame) -> InControlReport:
@@ -251,4 +350,5 @@ class EwmaDetector:
             theoretical_rate=theoretical,
             inflation_ratio=empirical / theoretical if theoretical > 0 else float("inf"),
             material_inflation_threshold=self.material_inflation_threshold,
+            gap_census=self.gap_census(),
         )

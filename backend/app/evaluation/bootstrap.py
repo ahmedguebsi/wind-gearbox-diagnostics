@@ -127,3 +127,153 @@ class BlockedBootstrap:
             n_boot=self.n_boot,
             seed=self.seed,
         )
+
+
+#: Below this many blocks per resample the percentile interval is driven by a
+#: handful of segments and is reported as unreliable rather than silently
+#: quoted. Same standard ADR-034 binding condition (b) sets for control-limit
+#: calibration; applied here for the same reason.
+MIN_RELIABLE_BLOCKS = 30
+
+
+@dataclass(frozen=True)
+class PanelConfidenceInterval:
+    """A CI over a panel of per-turbine series, with per-unit provenance.
+
+    WHY THIS EXISTS (docs/METHODOLOGY_REVIEW.md P-3, completing it). The RQ1
+    metrics are computed on a frame sorted by timestamp that INTERLEAVES six
+    turbines, so consecutive rows are different machines at the same instant.
+    Running a moving-block bootstrap over that series does two wrong things at
+    once: a "block" spans six machines rather than a stretch of one machine's
+    history, and the block length chosen from the interleaved autocorrelation
+    inflates roughly sixfold. On EXP-20260817-001 the unfiltered-test baseline
+    drew block length 132,858 from n = 740,463 — about SIX blocks per
+    replicate. A percentile interval from six blocks is not an interval.
+
+    P-3 specified per-turbine treatment for the bootstrap AND the DM test;
+    only the DM test was rewired (commit ceb954d). This closes the other half.
+
+    The resampling is a panel block bootstrap: each turbine's own series is
+    resampled in blocks whose length comes from THAT turbine's autocorrelation,
+    the resampled turbines are concatenated, and the statistic is evaluated on
+    the reassembled panel. The reported quantity is therefore unchanged — it is
+    still the fleet-level metric — while the dependence structure the resample
+    preserves is now the real one.
+    """
+
+    point: float
+    lower: float
+    upper: float
+    confidence: float
+    n_boot: int
+    seed: int
+    #: unit -> {block_length, n, n_blocks}
+    per_unit: dict[str, dict[str, int]]
+
+    @property
+    def min_blocks(self) -> int:
+        return min((u["n_blocks"] for u in self.per_unit.values()), default=0)
+
+    @property
+    def reliable(self) -> bool:
+        """False when any unit contributes too few blocks to resample from."""
+        return self.min_blocks >= MIN_RELIABLE_BLOCKS
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "point": self.point,
+            "lower": self.lower,
+            "upper": self.upper,
+            "confidence": self.confidence,
+            "n_boot": self.n_boot,
+            "seed": self.seed,
+            "per_unit": {k: dict(v) for k, v in self.per_unit.items()},
+            "min_blocks": self.min_blocks,
+            "reliable": self.reliable,
+            "caveat": (
+                None
+                if self.reliable
+                else (
+                    f"Fewest blocks in any unit is {self.min_blocks} (< "
+                    f"{MIN_RELIABLE_BLOCKS}); the percentile interval rests on "
+                    "too few independent segments to be quoted as a confidence "
+                    "interval. Report descriptively (PROJECT.md §19)."
+                )
+            ),
+        }
+
+
+class PanelBlockedBootstrap:
+    """Moving-block bootstrap over a panel of independent per-unit series.
+
+    Each unit keeps its own block length, so a machine with slower thermal
+    dynamics is resampled in longer blocks than one with faster dynamics
+    rather than both inheriting a length computed from their interleaving.
+    """
+
+    def __init__(self, n_boot: int, seed: int) -> None:
+        if n_boot < 100:
+            raise ConfigError("Too few bootstrap replicates", n_boot=n_boot)
+        self.n_boot = n_boot
+        self.seed = seed
+
+    def ci(
+        self,
+        series_by_unit: dict[str, np.ndarray],
+        statistic: Callable[[np.ndarray], float],
+        confidence: float = 0.95,
+    ) -> PanelConfidenceInterval:
+        """Percentile interval for ``statistic`` over the reassembled panel.
+
+        ``series_by_unit`` maps a unit label (turbine) to that unit's series in
+        chronological order. Units are resampled independently and concatenated
+        in sorted label order, so the result is deterministic given the seed.
+        """
+        if not series_by_unit:
+            raise ConfigError("Panel bootstrap requires at least one unit")
+        units = sorted(series_by_unit)
+        plans: dict[str, tuple[np.ndarray, int, int]] = {}
+        for unit in units:
+            values = np.asarray(series_by_unit[unit], dtype=float)
+            n = len(values)
+            if n < 8:
+                raise ConfigError("Unit series too short to bootstrap", unit=unit, n=n)
+            block = block_length_from_autocorrelation(values)
+            if n <= block:
+                raise ConfigError(
+                    "Unit series shorter than a single block", unit=unit, n=n, block_length=block
+                )
+            plans[unit] = (values, block, math.ceil(n / block))
+        if not 0.0 < confidence < 1.0:
+            raise ConfigError("Confidence must be in (0, 1)", confidence=confidence)
+
+        rng = np.random.default_rng(self.seed)
+        replicates = np.empty(self.n_boot, dtype=float)
+        for i in range(self.n_boot):
+            parts: list[np.ndarray] = []
+            for unit in units:
+                values, block, n_blocks = plans[unit]
+                starts = rng.integers(0, len(values) - block + 1, size=n_blocks)
+                indices = (starts[:, None] + np.arange(block)).ravel()[: len(values)]
+                parts.append(values[indices])
+            replicates[i] = statistic(np.concatenate(parts))
+
+        observed = np.concatenate([plans[unit][0] for unit in units])
+        alpha = (1.0 - confidence) / 2.0
+        lower, upper = np.quantile(replicates, [alpha, 1.0 - alpha])
+        return PanelConfidenceInterval(
+            point=float(statistic(observed)),
+            lower=float(lower),
+            upper=float(upper),
+            confidence=confidence,
+            n_boot=self.n_boot,
+            seed=self.seed,
+            per_unit={
+                unit: {
+                    "block_length": plans[unit][1],
+                    "n": len(plans[unit][0]),
+                    "n_blocks": plans[unit][2],
+                }
+                for unit in units
+            },
+        )

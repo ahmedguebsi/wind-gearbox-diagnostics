@@ -606,3 +606,339 @@ Mitigation status:  OPEN — diagnosed and addressed by ADR-034 (PROPOSED).
                     rejects prewhitening. Reproduce with
                     scripts/diagnose_residual_dependence.py.
 Source:             M-20 empirical in-control characterization, experiment EXP-20260817-001
+
+## LIM-025 — Threshold statistics are fitted on data containing the tuning block
+
+Date discovered:    2026-08-18
+Description:        ADR-030 moved candidate scoring to an inner holdout carved
+                    from the END of TRAIN, so the healthy VALIDATION block is
+                    no longer used for selection. But the ADR-001 default
+                    fits normalization and control-limit statistics on
+                    `training` — which CONTAINS that inner holdout. The
+                    separation ADR-030 bought is therefore partly given back:
+                    the thresholds are calibrated on data that includes the
+                    block the model was selected to fit well.
+                    Extent, measured: the inner holdout is 20% of the healthy
+                    training partition (103,628 of 518,141 rows in
+                    EXP-20260817-001), so roughly a fifth of the calibration
+                    population is selection-touched. The bias direction is the
+                    one ADR-030 names — an optimistically low in-control
+                    false-alarm rate — at about a fifth of the strength.
+                    This is separable at zero data cost by closing ADR-001 to
+                    `validation`, which ADR-030 left clean for exactly this
+                    purpose. That closure is decision D-11, still OPEN.
+Affected RQ(s):     RQ2 (threshold provenance and in-control characterisation)
+Mitigation status:  OPEN — closes with D-11/ADR-001. Both branches exist as
+                    configuration and both are swept by M-27, so the closure
+                    evidence §22 names can be produced in one run.
+Source:             source audit 2026-08-18; `runner.py` `_fit_and_predict`
+                    and `_residual_stages`; ADR-030.
+
+## LIM-026 — The single event match is a cold-side excursion
+
+Date discovered:    2026-08-18
+Description:        FINDING, not a caveat. EVENT-001 is code 1860, "Oil filter
+                    gear choked" — a lubrication-flow restriction whose
+                    physical signature is a temperature RISE. The detection
+                    that matched it is a temperature FALL.
+                    Measured from EXP-20260817-001's stored residuals at the
+                    λ=0.2 / 3σ configuration: of the 82 persistent detections
+                    on Kelmarsh 1 inside the ADR-017 14-day window, 72 are
+                    direction −1 and 10 are +1. The matched detection
+                    (2019-02-10 20:50 UTC, the one carrying the recorded
+                    lead_time_minutes = 19,910) is direction −1. The earliest
+                    POSITIVE-direction persistent detection is 2019-02-22
+                    05:10, two days before onset rather than thirteen.
+                    The project's own FMEA interpreter agrees: its rendering
+                    at the matched timestamp reads "gearbox_bearing_temperature
+                    LOW (EWMA −1.24); gearbox_oil_temperature normal (EWMA
+                    −1.23) ... No candidate mechanism: the anomalous pattern
+                    matched no FMEA rule."
+                    ADR-017's matching rule is direction-agnostic and was
+                    pre-registered that way, so the verdict stands as computed
+                    and is NOT revised. What changes is that the direction is
+                    now recorded on every match (ADR-037) so this cannot be
+                    read as early detection by omission.
+Consequence for RQ3:
+                    the sole labelled event contributes no positive evidence
+                    for mechanism interpretation. The case study's content is
+                    what LIM-023 already established — that coordinated thermal
+                    residuals respond to environmental disturbance in a manner
+                    not distinguishable from degradation onset — and this
+                    finding sharpens it: the response was not even of the sign
+                    the mechanism predicts.
+Affected RQ(s):     RQ2, RQ3 (what the EVENT-001 case study evidences)
+Mitigation status:  ACCEPTED — reported as a finding. Chapter 5 must state the
+                    direction alongside any mention of the 13.8-day figure,
+                    under the LIM-010 strongest-form obligation.
+Source:             re-derivation from `artifacts/EXP-20260817-001/residuals/
+                    test.parquet` via `persistent_detections`, 2026-08-18;
+                    ADR-037.
+
+## LIM-027 — Five provisional parameters cannot be defended by this dataset
+
+Date discovered:    2026-08-18
+Description:        PROJECT.md §27.3 states that sensitivity analysis
+                    "converts the provisional configuration values of Sections
+                    13 and 23 into defended choices". For five of the fourteen
+                    provisional parameters it cannot, because they have no
+                    lever on this dataset:
+                    - `healthy_state.fault_pre_exclusion_days` (grid 15/30/60)
+                      and `healthy_state.maintenance_post_exclusion_days`
+                      (1/2/4): no caller anywhere constructs fault or
+                      maintenance exclusion windows. The dataset carries no
+                      maintenance-confirmed failures (LIM-002) and the
+                      designated episode is applied as a manual window, so the
+                      pre-fault and post-maintenance machinery never runs.
+                      Verified by inspecting every `PipelineInputs`
+                      construction in the repository.
+                    - `healthy_state.step_change_exclusion_days`,
+                      `validation.step_change_window_samples` and
+                      `validation.step_change_min_magnitude_c`: ADR-018
+                      disabled step-change exclusion, and the suite sweeps one
+                      parameter at a time around that base, so all three are
+                      inert except inside the arm that switches exclusion back
+                      on.
+                    Before ADR-040 all five produced identical outcomes at
+                    every swept value and were reported as STABLE — which
+                    reads as robustness evidence for parameters that were
+                    merely switched off.
+Affected RQ(s):     RQ1, RQ2 (which configuration values the sensitivity phase
+                    can actually defend)
+Mitigation status:  MITIGATED as reporting (ADR-040: the suite now labels them
+                    NOT_APPLICABLE with a stated reason and excludes them from
+                    the conclusion-flip register). The underlying constraint is
+                    ACCEPTED and permanent for this dataset: Chapter 3 must
+                    state that these five values are inherited from PROJECT.md
+                    and are undefended by experiment, rather than implying the
+                    sweep defended them.
+Source:             source audit 2026-08-18; ADR-040.
+
+## LIM-028 — Detection scores operating states the model never trained on
+
+Date discovered:    2026-08-18
+Description:        Two rules of the specification interact in a way neither
+                    anticipates. PROJECT.md §13 builds the healthy training
+                    population by excluding alarm periods and every row below
+                    the 50 kW power floor; PROJECT.md §14 keeps the TEST
+                    partition UNFILTERED, because anomalous rows there are the
+                    signal being monitored.
+                    The consequence is that the NBM is fitted only on
+                    above-floor, alarm-free operation and is then asked to
+                    score every monitoring row, including parked, curtailed,
+                    alarmed and negative-power samples. On EXP-20260817-001
+                    the healthy slice retains 538,045 of 740,463 monitoring
+                    rows, so roughly 27% of the detection stream is a regime
+                    the model never saw. The PHASE 10 EDA records that 10.8%
+                    of samples carry negative active power and 17.1% fall
+                    below the floor.
+                    The size of the effect is visible in the metrics: thesis
+                    RMSE is 2.165 °C on the healthy slice and 7.285 °C on the
+                    unfiltered stream the detector actually reads — a 3.4x
+                    degradation on the population that generates the alarms.
+                    A material share of the 19,326 false-alarm episodes is
+                    therefore extrapolation, not degradation.
+Affected RQ(s):     RQ2 (every false-alarm claim), RQ3 (alert volume)
+Mitigation status:  OPEN — no mitigation is applied. The candidates are an
+                    operating-state gate on the DETECTION path (which §14
+                    arguably forbids), or reporting detection results
+                    separately for in-regime and out-of-regime rows. Neither
+                    is adopted here: both are methodological choices reserved
+                    to the author. Stated so the false-alarm rate is not read
+                    as a pure detector property.
+Source:             source audit 2026-08-18; EXP-20260817-001 metrics;
+                    `docs/evidence/KELMARSH_EDA_2016_2021.json`
+                    (operating_regime).
+
+## LIM-029 — Monitoring-period dispersion: a regime STEP plus a slower drift
+
+Date discovered:    2026-08-18
+Description:        FINDING, with the decomposition stated because the headline
+                    number is misleading on its own.
+                    Annual residual σ on the unfiltered monitoring stream rises
+                    across the period, on all six turbines and both targets:
+                      bearing σ  1.99 (train) → 5.35 (2019) → 6.59 → 9.64 (2021)
+                      oil σ      2.41 (train) → 4.23 (2019) → 5.13 → 7.33 (2021)
+                    Read alone, that looks like steady model ageing. The §20
+                    dispersion figure (ADR-045) shows it is not, and the
+                    decomposition below is what the figure prompted:
+
+                    (a) TYPICAL DAYS BARELY MOVE. Median daily σ runs
+                        1.50 (train) → 1.81 (2019) → 1.71 (2020) → 2.41 (2021)
+                        for bearing; 1.71 → 2.00 → 1.92 → 2.48 for oil. A
+                        30-day rolling median of the fleet is close to flat
+                        until early 2021.
+                    (b) THE TAIL IS WHAT MOVES. The fraction of residuals
+                        exceeding |10 °C| runs
+                        0.155% (train) → 7.08% (2019) → 8.10% → 15.82% (2021)
+                        for bearing; 0.514% → 4.59% → 5.92% → 13.54% for oil.
+
+                    Two mechanisms, of different sizes:
+                    - A STEP at the train/monitor boundary — 0.155% to 7.08%
+                      extreme residuals immediately, with no time for ageing.
+                      This is LIM-028: the training population is
+                      healthy-filtered and the monitoring stream is not, so
+                      roughly 27% of the scored rows are operating states the
+                      model never saw. This is the DOMINANT term.
+                    - A genuine DRIFT on top of it: extremes roughly double
+                      again from 2019 to 2021 and typical-day σ rises ~33%,
+                      which the regime difference alone does not explain and
+                      which is consistent with the model ageing LIM-021 lists.
+                      This is the SECONDARY term.
+
+                    Kelmarsh 1 — the EVENT-001 turbine — is LESS dispersed than
+                    the fleet in every year, so neither term is a fault
+                    signature. The pooled median drifts negative in step
+                    (bearing −0.090 → −0.247 → −0.718) and LOW exceedances
+                    outnumber HIGH by about 3.5 : 1 on the monitoring stream.
+Consequence:        the dominant variance in the monitoring period is
+                    OPERATING-REGIME MISMATCH, not gearbox condition and not
+                    primarily ageing. An earlier draft of this entry attributed
+                    it mainly to ageing; the daily decomposition does not
+                    support that and the entry is corrected here rather than
+                    quietly amended. No detection claim on this dataset can be
+                    attributed to degradation without addressing both terms.
+Affected RQ(s):     RQ1 (what the unfiltered-period metrics measure), RQ2
+                    (every detection claim), RQ3
+Mitigation status:  OPEN. Two separable measurements would close it, neither
+                    commissioned here: (i) report detection results split by
+                    in-regime / out-of-regime rows, which isolates the step;
+                    (ii) a refit-horizon study (refit at 2019-01 / 2020-01 /
+                    2021-01, report σ per horizon), which isolates the drift.
+                    Together they are the most transferable result available
+                    from this dataset — how long a statically-fitted SCADA NBM
+                    stays valid, and how much of its apparent decay is really
+                    regime mismatch — and are recommended as the first item of
+                    future work.
+Source:             aggregation of `artifacts/EXP-20260817-001/residuals/
+                    test.parquet` by year, turbine and day, 2026-08-18;
+                    `plots/*_residual_over_time.png` (ADR-045).
+
+## LIM-030 — The FMEA rule base cannot discriminate at the measured channel correlation
+
+Date discovered:    2026-08-18
+Description:        ADR-035 measured the cross-target residual correlation at
+                    r = 0.932–0.952 and drew the consequence for RQ2. The
+                    consequence for RQ3 was not drawn, and it is at least as
+                    binding.
+                    Of the five ADR-008 rules, four are instantiable (FMEA-005
+                    needs generator-side residual channels that are not
+                    modelled). Of those four:
+                    - FMEA-001 (gear-teeth wear) requires oil HIGH with bearing
+                      `any`;
+                    - FMEA-002 (HSS bearing) requires bearing HIGH with oil
+                      `any`;
+                    - FMEA-004 (lubrication degradation) requires BOTH HIGH.
+                    At r ≈ 0.95 an oil-high state implies a bearing-high state
+                    almost always, so all three fire together on essentially
+                    every positive excursion. FMEA-003 requires oil HIGH with
+                    bearing NORMAL — a near-empty region of a joint
+                    distribution ADR-035 describes as "a thin cigar on the
+                    diagonal".
+                    The interpretation layer therefore returns the same
+                    undifferentiated candidate set whenever it fires. Its
+                    temporal qualifiers (lead / lag / sustained), which are
+                    what Chapter 2 Table 2.3 actually uses to separate the
+                    mechanisms, are carried as TEXT and are not mechanically
+                    matched — the ruleset header states this, but the
+                    consequence for RQ3's discriminating power does not appear
+                    anywhere.
+                    Compounding it: the bearing target is a designated
+                    main-shaft channel ("Rear bearing temperature", ADR-012),
+                    not an internal gearbox bearing, so FMEA-002 and FMEA-003
+                    describe a node this dataset does not instrument (LIM-001).
+Affected RQ(s):     RQ3 (the central claim), RQ2
+Mitigation status:  OPEN. RQ3 as posed cannot be answered affirmatively on
+                    this dataset by this rule base. The honest options are to
+                    reduce the RQ3 claim to a demonstration of the mechanism
+                    (which the code supports and Guard 7 labels correctly), or
+                    to implement the ADR-035 orthogonal-mode arm, whose
+                    differential mode is the only quantity available here that
+                    could discriminate a bearing-specific signature. Neither is
+                    adopted without an author ruling.
+Source:             `app/fmea/rulesets/initial_v1.yaml` read against ADR-035's
+                    measured correlations, 2026-08-18.
+
+## LIM-031 — A no-model baseline matches the NBM on detection behaviour
+
+Date discovered:    2026-08-18
+Description:        FINDING, from the B3 arm the EXPERIMENT_PROTOCOL §4 listed
+                    as required and that had never been run
+                    (`scripts/run_robustness_suite.py --arms b3`).
+                    A detector using NO model, NO training period and NO tuning
+                    — the leave-one-out fleet-median deviation of the raw
+                    target, `actual - median(peer turbines at the same
+                    timestamp)` — was pushed through the IDENTICAL normalizer,
+                    EWMA detector and matched-FPR sweep as the NBM residual, so
+                    the two arms differ only in how the expected value was
+                    formed. Measured on the healthy validation block:
+
+                      residual sigma, bearing   fleet 2.446 vs NBM 2.076 degC
+                      residual sigma, oil       fleet 2.255 vs NBM 2.578 degC
+                      in-control rate           fleet 0.17302 vs NBM 0.16214
+                      inflation vs nominal      fleet 64.1x  vs NBM 60.1x
+                      multiplier @10 FA/ty      fleet 8.89   vs NBM 10.76
+
+                    On the gearbox OIL target — one of the two thesis targets —
+                    the trivial baseline produces a TIGHTER residual than the
+                    tuned multi-target XGBoost NBM. On bearing the NBM is 15%
+                    tighter. Both arms show the same ~60x in-control inflation,
+                    so that pathology is a property of the thermal signal, not
+                    of the model.
+Scope, stated fairly:
+                    this does not make the NBM worthless, and the two
+                    quantities are not interchangeable. The fleet-relative
+                    deviation uses CONTEMPORANEOUS cross-turbine information:
+                    it can only see single-machine deviations and would be
+                    blind to a farm-wide fault mode, which is the same
+                    limitation ADR-029 binds its arm to. The NBM needs no peers
+                    and would still function on a single-turbine deployment.
+Consequence:        the NBM's contribution OVER A NO-MODEL BASELINE is not
+                    established by detection behaviour. Any argument that runs
+                    from RQ1 accuracy to RQ2 detection capability must now
+                    address this, and Chapter 4 should report the comparison
+                    rather than leave an examiner to ask for it.
+Affected RQ(s):     RQ1 (what the model's accuracy buys), RQ2 (every detection
+                    claim)
+Mitigation status:  ACCEPTED as a finding and reported. The follow-up that
+                    would sharpen it is B4 (persistence without EWMA), which
+                    isolates the other untested component of the detector.
+Source:             `artifacts/EXP-20260817-001/evaluation/robustness_suite.json`,
+                    arm `b3`, 2026-08-18; ADR-046.
+
+## LIM-032 — The multi-target architecture contributes no measurable accuracy
+
+Date discovered:    2026-08-18
+Description:        FINDING, from the PROJECT.md §18 per-target ablation
+                    (`--arms multi_output`), which the specification requires
+                    and which had never been run despite the code path existing
+                    and being tested.
+                    Two full pipeline runs identical except for
+                    `model.multi_output`. Thesis-model RMSE on the ADR-022
+                    headline slice:
+                      bearing   multi-output 2.1647 vs per-target 2.1611
+                      oil       multi-output 2.6904 vs per-target 2.7155
+                    Each configuration wins on one target; both margins are
+                    under 1% of RMSE and roughly an order of magnitude smaller
+                    than the confidence-interval half-width on the same
+                    quantity (~0.09 bearing, ~0.11 oil). The baselines
+                    reproduce identically across both arms, confirming the runs
+                    differed only in the intended parameter.
+Consequence:        the thesis cannot claim an ACCURACY benefit from its
+                    headline architectural choice. Native multi-output remains
+                    defensible on other grounds — one model to fit, store and
+                    serve — but "multi-target" is not doing work at the
+                    modelling stage.
+                    It was never expected to: the multi-target framing was
+                    supposed to pay off at the COORDINATION stage. ADR-035 has
+                    since measured the two residual channels at r ~ 0.95, which
+                    is where that payoff was meant to come from. Between this
+                    entry and ADR-035, the space in which the multi-target
+                    contribution can live has narrowed to the orthogonal-mode
+                    arm ADR-035 registers and which remains unimplemented.
+Affected RQ(s):     RQ1, RQ2 (the thesis's central architectural claim)
+Mitigation status:  ACCEPTED as a finding. Chapter 4 reports the ablation;
+                    Chapter 6 should not claim accuracy benefit from
+                    multi-target modelling.
+Source:             `artifacts/EXP-20260817-001/evaluation/robustness_suite.json`,
+                    arm `multi_output`, 2026-08-18; ADR-046.

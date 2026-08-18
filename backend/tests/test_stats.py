@@ -19,8 +19,10 @@ from app.detection.matched_fpr import (
     OperatingPoint,
 )
 from app.evaluation.bootstrap import (
+    MIN_RELIABLE_BLOCKS,
     BlockedBootstrap,
     ConfidenceInterval,
+    PanelBlockedBootstrap,
     block_length_from_autocorrelation,
 )
 from app.evaluation.comparison import (
@@ -66,6 +68,66 @@ class TestBlockedBootstrap:
         assert first == second
         assert first.lower <= first.point <= first.upper
         assert first.block_length == 10 and first.seed == 7
+
+    def test_panel_bootstrap_keeps_per_turbine_block_lengths(self):
+        """ADR-038 / P-3: a unit with slower dynamics must draw a LONGER block
+        than a faster one, instead of both inheriting a length computed from
+        their interleaving."""
+        ci = PanelBlockedBootstrap(200, 42).ci(
+            {"slow": _ar1(4000, 0.97, 0), "fast": _ar1(4000, 0.1, 1)},
+            lambda r: float(np.mean(r)),
+        )
+        assert ci.per_unit["slow"]["block_length"] > ci.per_unit["fast"]["block_length"]
+        assert set(ci.per_unit) == {"slow", "fast"}
+
+    def test_interleaving_corrupts_the_pooled_block_length(self):
+        """The defect this closes, reproduced on synthetic data.
+
+        Interleaving two autocorrelated units changes the ACF the heuristic
+        reads, so the pooled series yields a block length appropriate to
+        NEITHER unit. That is the mechanism by which EXP-20260817-001 drew
+        132,858 (about six blocks) on the unfiltered test period.
+        """
+        a, b = _ar1(6000, 0.98, 2), _ar1(6000, 0.98, 3)
+        interleaved = np.empty(12000)
+        interleaved[0::2], interleaved[1::2] = a, b
+        pooled_block = block_length_from_autocorrelation(interleaved)
+        per_unit_block = block_length_from_autocorrelation(a)
+        assert pooled_block != per_unit_block
+
+    def test_panel_bootstrap_flags_too_few_blocks(self):
+        """MIN_RELIABLE_BLOCKS: an interval resting on a handful of segments is
+        reported as unreliable with a caveat, never quoted silently."""
+        # Random walk: the ACF stays outside the white-noise band for the whole
+        # search, so the block length saturates at n // 4 — four blocks.
+        stubborn = np.cumsum(np.random.default_rng(4).normal(size=400))
+        ci = PanelBlockedBootstrap(100, 42).ci({"t1": stubborn}, lambda r: float(np.mean(r)))
+        assert ci.min_blocks < MIN_RELIABLE_BLOCKS
+        assert ci.reliable is False
+        assert "too few independent segments" in ci.as_dict()["caveat"]
+
+    def test_panel_bootstrap_is_seed_reproducible_and_brackets_the_point(self):
+        panel = {"t1": _ar1(2000, 0.6, 5), "t2": _ar1(2000, 0.6, 6)}
+
+        def stat(r: np.ndarray) -> float:
+            return float(np.sqrt(np.mean(r**2)))
+
+        first = PanelBlockedBootstrap(300, 42).ci(panel, stat)
+        second = PanelBlockedBootstrap(300, 42).ci(panel, stat)
+        assert (first.lower, first.upper) == (second.lower, second.upper)
+        assert first.lower <= first.point <= first.upper
+        assert first.reliable is True
+
+    def test_panel_bootstrap_point_is_the_pooled_statistic(self):
+        """The reported quantity must remain the FLEET metric — only the
+        resampling changes, never what is being estimated."""
+        panel = {"t1": np.arange(100.0), "t2": np.arange(100.0, 200.0)}
+        ci = PanelBlockedBootstrap(100, 42).ci(panel, lambda r: float(np.mean(r)))
+        assert ci.point == pytest.approx(float(np.mean(np.arange(200.0))))
+
+    def test_panel_bootstrap_rejects_empty_panel(self):
+        with pytest.raises(ConfigError):
+            PanelBlockedBootstrap(100, 42).ci({}, lambda r: float(np.mean(r)))
 
     def test_series_shorter_than_block_rejected(self):
         with pytest.raises(ConfigError):

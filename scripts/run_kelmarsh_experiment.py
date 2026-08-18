@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -56,10 +57,7 @@ from app.data.schema import (  # noqa: E402
 )
 from app.data.splitting import ExperimentFlags, SplitSpec, SplitStrategy  # noqa: E402
 from app.detection.coordinated import CoordinatedAnalyzer  # noqa: E402
-from app.evaluation.bootstrap import (  # noqa: E402
-    BlockedBootstrap,
-    block_length_from_autocorrelation,
-)
+from app.evaluation.bootstrap import PanelBlockedBootstrap  # noqa: E402
 from app.evaluation.dm_test import (  # noqa: E402
     diebold_mariano,
     diebold_mariano_by_turbine,
@@ -67,13 +65,16 @@ from app.evaluation.dm_test import (  # noqa: E402
 from app.evaluation.event_eval import evaluate_events  # noqa: E402
 from app.evaluation.events import EVENT_001, StatusValue, parse_status_csv  # noqa: E402
 from app.experiments.runner import (  # noqa: E402
+    THESIS_KEY,
     PipelineInputs,
     PipelineResult,
+    assert_reproducible_code_state,
     run_experiment,
 )
 from app.experiments.store import ArtifactStore  # noqa: E402
 from app.fmea.interpreter import FmeaInterpreter  # noqa: E402
 from app.fmea.knowledge_base import FmeaKnowledgeBase, default_ruleset_path  # noqa: E402
+from app.models.metrics import residual  # noqa: E402
 from app.residuals.ewma import ControlLimitFormulation, ControlLimitSpec, EwmaDetector  # noqa: E402
 from app.residuals.normalization import partition_for  # noqa: E402
 
@@ -81,8 +82,6 @@ SPAN = (date(2016, 5, 3), date(2021, 6, 30))  # ADR-009
 TRAIN_END = date(2018, 7, 1)  # RATIFIED (ADR-023, closes D-07)
 VALIDATION_END = date(2019, 2, 1)  # 9.7 d before the ADR-017 window opens (ADR-023)
 STATUS_SKIP_LINES = 9
-BOOTSTRAP_REPLICATES = 1000
-BOOTSTRAP_SEED = 42
 
 # Author-designated exclusion windows.
 # ADR-018: the two Kelmarsh 6 episodes whose level shifts persist WITHOUT a
@@ -198,23 +197,46 @@ def alarm_windows(
     return windows, stats
 
 
-def metric_cis(residuals: np.ndarray, actual: np.ndarray) -> dict[str, dict[str, float]]:
-    """Blocked-bootstrap CIs for RMSE/MAE/bias; R² via the fixed-denominator
-    approximation (variance of actuals held at its sample value — documented
-    approximation, labelled in the output)."""
-    block = block_length_from_autocorrelation(residuals)
-    bootstrap = BlockedBootstrap(block, BOOTSTRAP_REPLICATES, BOOTSTRAP_SEED)
+def metric_cis(
+    residuals_by_turbine: dict[str, np.ndarray],
+    actual: np.ndarray,
+    *,
+    n_boot: int,
+    seed: int,
+) -> dict[str, Any]:
+    """PANEL blocked-bootstrap CIs for RMSE/MAE/bias, plus R² via the
+    fixed-denominator approximation (variance of actuals held at its sample
+    value — a documented approximation, labelled in the output).
+
+    ADR-038 / METHODOLOGY_REVIEW P-3: each turbine is resampled in blocks whose
+    length comes from ITS OWN autocorrelation, then the panel is reassembled
+    and the fleet statistic evaluated. Previously the bootstrap ran on the
+    pooled interleaved series, where a block spanned six machines and the
+    block length inflated roughly sixfold — the unfiltered-test baseline drew
+    six blocks per replicate. Per-unit block counts are reported so that
+    failure mode is visible rather than latent.
+    """
+    bootstrap = PanelBlockedBootstrap(n_boot, seed)
     var_actual = float(np.var(actual))
-    statistics = {
+    statistics: dict[str, Callable[[np.ndarray], float]] = {
         "rmse": lambda r: float(np.sqrt(np.mean(r**2))),
         "mae": lambda r: float(np.mean(np.abs(r))),
         "bias": lambda r: float(np.mean(r)),
         "r2_fixed_denominator": lambda r: float(1.0 - np.mean(r**2) / var_actual),
     }
-    out: dict[str, dict[str, float]] = {"block_length": {"value": float(block)}}
+    out: dict[str, Any] = {}
     for name, stat in statistics.items():
-        ci = bootstrap.ci(residuals, stat)
-        out[name] = {"point": ci.point, "lower": ci.lower, "upper": ci.upper}
+        ci = bootstrap.ci(residuals_by_turbine, stat)
+        payload = ci.as_dict()
+        out[name] = {
+            "point": payload["point"],
+            "lower": payload["lower"],
+            "upper": payload["upper"],
+            "reliable": payload["reliable"],
+            "caveat": payload["caveat"],
+        }
+        out.setdefault("bootstrap", payload["per_unit"])
+        out.setdefault("min_blocks", {"value": payload["min_blocks"]})
     return out
 
 
@@ -287,6 +309,7 @@ def three_period_rq1(
     result: PipelineResult,
     schema: CanonicalSchema,
     targets: tuple[str, ...],
+    config: AppConfig | None = None,
 ) -> tuple[
     dict[str, dict[str, Any]],
     dict[str, dict[str, Any]],
@@ -296,7 +319,13 @@ def three_period_rq1(
 
     Shared with the ADR-027 nacelle ablation so both arms are computed by
     the identical machinery. Returns (rq1, dm, period_frames).
+
+    ``config`` supplies the bootstrap seed and replicate count, which ADR-044
+    lifted out of module constants and into the resolved configuration so they
+    reach experiment metadata like every other stochastic component (§15).
     """
+    evaluation = (config or kelmarsh_config()).evaluation
+    n_boot, seed = evaluation.bootstrap_replicates, evaluation.bootstrap_seed
     split = result.split
     cleaned = result.cleaned.frame
     boundary = split.boundaries_utc[0]
@@ -311,26 +340,38 @@ def three_period_rq1(
     dm: dict[str, dict[str, Any]] = {}
     for period, frame in period_frames.items():
         frame = frame.sort_values(schema.timestamp_name)
+        # ADR-032 requires three-model comparison tables. Iterating the fitted
+        # model set rather than a hard-coded pair is what makes that true: the
+        # Elastic Net reference previously appeared in metrics.json as bare
+        # point estimates and never reached the CI/DM table at all, so the
+        # non-linearity-versus-regularisation question it was admitted to
+        # answer could not be answered with an interval.
+        model_keys = [k for k in result.models if f"{k}_{period}" in result.predictions]
         predicted_by_model = {
             model_key: result.predictions[f"{model_key}_{period}"].loc[frame.index]
-            for model_key in ("thesis", "baseline")
+            for model_key in model_keys
         }
+        turbines_all = frame[turbine_column].astype(str).to_numpy()
         for target in targets:
             actual = frame[target].to_numpy(dtype=float)
-            # ONE mask across both models. Masking per model and then
+            # ONE mask across ALL models. Masking per model and then
             # truncating to the shorter series would pair mismatched
-            # observations whenever the two models' missing patterns differ.
+            # observations whenever the models' missing patterns differ.
             keep = ~np.isnan(actual)
             for predictions in predicted_by_model.values():
                 keep &= ~np.isnan(predictions[target].to_numpy(dtype=float))
 
+            turbines = turbines_all[keep]
             losses: dict[str, np.ndarray] = {}
             for model_key, predictions in predicted_by_model.items():
-                residual = actual[keep] - predictions[target].to_numpy(dtype=float)[keep]
+                errors = residual(actual[keep], predictions[target].to_numpy(dtype=float)[keep])
                 rq1.setdefault(period, {}).setdefault(model_key, {})[target] = metric_cis(
-                    residual, actual[keep]
+                    {t: errors[turbines == t] for t in sorted(set(turbines))},
+                    actual[keep],
+                    n_boot=n_boot,
+                    seed=seed,
                 )
-                losses[model_key] = residual**2
+                losses[model_key] = errors**2
 
             # ADR/P-3: the pooled series interleaves six turbines at every
             # 10-minute stamp, so a single test treats contemporaneous
@@ -338,19 +379,24 @@ def three_period_rq1(
             # lag rule covers a fraction of the real dependence. Both are
             # reported: the pooled figure is what was previously published,
             # so the change is quantified rather than silently substituted.
-            turbines = frame[turbine_column].astype(str).to_numpy()[keep]
-            dm.setdefault(period, {})[target] = {
-                "pooled_interleaved": diebold_mariano(
-                    losses["thesis"], losses["baseline"]
-                ).as_dict(),
-                "per_turbine": diebold_mariano_by_turbine(
-                    losses["thesis"], losses["baseline"], turbines
-                ).as_dict(),
-                "note": (
-                    "per_turbine is the defensible figure; pooled_interleaved "
-                    "is retained only so the correction can be measured."
-                ),
-            }
+            #
+            # One comparison per BASELINE, per PROJECT.md §19 ("XGBoost vs.
+            # EACH baseline, per target"). Only the OLS pairing was computed
+            # before, so the Elastic Net reference had no significance test.
+            for other in sorted(k for k in losses if k != THESIS_KEY):
+                dm.setdefault(period, {}).setdefault(target, {})[f"thesis_vs_{other}"] = {
+                    "pooled_interleaved": diebold_mariano(
+                        losses[THESIS_KEY], losses[other]
+                    ).as_dict(),
+                    "per_turbine": diebold_mariano_by_turbine(
+                        losses[THESIS_KEY], losses[other], turbines
+                    ).as_dict(),
+                    "note": (
+                        "per_turbine is the defensible figure; pooled_interleaved "
+                        "is retained only so the correction can be measured. A "
+                        "negative statistic favours the thesis model."
+                    ),
+                }
     return rq1, dm, period_frames
 
 
@@ -362,6 +408,11 @@ def main() -> int:
     # without editing the script. Overridable for a copy held elsewhere.
     parser.add_argument("--downloads", type=Path, default=REPO_ROOT / "dataset")
     parser.add_argument("--artifacts", type=Path, default=REPO_ROOT / "artifacts")
+    parser.add_argument(
+        "--allow-dirty",
+        action="store_true",
+        help="Run despite an uncommitted working tree (exploratory runs only).",
+    )
     args = parser.parse_args()
     if not args.approved_by:
         raise SystemExit(
@@ -370,6 +421,11 @@ def main() -> int:
         )
 
     schema = default_schema()
+    # ADR-044: refuse before the ~16-minute pipeline, not after it. The
+    # previous headline run (EXP-20260817-001) was executed from a dirty tree,
+    # so the commit recorded in its metadata does not name the code that
+    # produced it.
+    assert_reproducible_code_state(schema.schema_version, allow_dirty=args.allow_dirty)
     print("Collecting status windows (Stop/Warning with populated ends)...")
     config = kelmarsh_config()
     inputs, window_stats = kelmarsh_inputs(
@@ -396,7 +452,7 @@ def main() -> int:
     # ADR-021 tuning; unfiltered test is not an RQ1 measure. All three are
     # reported with labels (metrics.rq1 carries the designations).
     print("Computing blocked-bootstrap CIs and DM tests (three periods)...")
-    rq1, dm, period_frames = three_period_rq1(result, schema, targets)
+    rq1, dm, period_frames = three_period_rq1(result, schema, targets, config)
 
     # ---- EWMA detection on the monitoring period → coordinated → FMEA -----
     print("Detecting on the monitoring period and interpreting EVENT-001...")

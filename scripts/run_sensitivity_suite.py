@@ -56,7 +56,7 @@ from app.core.versioning import capture_version_stamp  # noqa: E402
 from app.data.schema import default_schema  # noqa: E402
 from app.detection.matched_fpr import CoordinatedPipeline, matched_multiplier, sweep  # noqa: E402
 from app.evaluation.events import EVENT_001  # noqa: E402
-from app.evaluation.sensitivity import run_sensitivity  # noqa: E402
+from app.evaluation.sensitivity import ApplicabilityCheck, run_sensitivity  # noqa: E402
 from app.experiments.runner import PipelineInputs, run_pipeline  # noqa: E402
 from app.residuals.ewma import ControlLimitFormulation, ControlLimitSpec, EwmaDetector  # noqa: E402
 from app.residuals.normalization import partition_for  # noqa: E402
@@ -73,6 +73,16 @@ ICING_WINDOW = (
     pd.Timestamp("2019-02-11 17:10:00", tz="UTC"),
 )
 EVENT_TURBINE = "Kelmarsh 1"
+
+
+def _latest_experiment(artifacts: Path) -> str:
+    """Newest EXP-* directory present, so the suite cannot default to a run
+    that has since been deleted (the previous default named EXP-20260813-002,
+    whose artifacts no longer exist)."""
+    candidates = sorted(p.name for p in artifacts.glob("EXP-*") if p.is_dir())
+    if not candidates:
+        raise SystemExit(f"No experiment directories found under {artifacts}")
+    return candidates[-1]
 
 
 def persistent_starts(flags: pd.Series, min_samples: int) -> list[pd.Timestamp]:
@@ -178,15 +188,74 @@ def outcome_for(config: AppConfig, inputs: PipelineInputs) -> dict[str, object]:
     }
 
 
+def applicability_checks(inputs: PipelineInputs) -> dict[str, ApplicabilityCheck]:
+    """Which provisional parameters actually have a lever on THIS run (ADR-040).
+
+    Applicability depends on the run's inputs, not only its configuration, so
+    it is decided here where the inputs are known rather than inside the
+    generic suite.
+
+    On the Kelmarsh holdings five of the thirteen provisional parameters have
+    no lever: the dataset carries no maintenance-confirmed failures (LIM-002),
+    so no caller constructs fault or maintenance exclusion windows; and
+    ADR-018 disabled step-change exclusion, so its three parameters are inert
+    except in the arm that switches it back on. Before this, all five reported
+    identical outcomes and were labelled STABLE.
+    """
+    no_fault_windows = not inputs.fault_windows
+    no_maintenance_windows = not inputs.maintenance_windows
+
+    def gated_on_fault_windows(_: AppConfig) -> str | None:
+        return (
+            "No fault exclusion windows are supplied for this dataset: it "
+            "carries no maintenance-confirmed failures (LIM-002/ADR-013), so "
+            "the pre-fault window has nothing to act on."
+            if no_fault_windows
+            else None
+        )
+
+    def gated_on_maintenance_windows(_: AppConfig) -> str | None:
+        return (
+            "No maintenance exclusion windows are supplied for this dataset "
+            "(LIM-002: the exports carry no maintenance records), so the "
+            "post-maintenance window has nothing to act on."
+            if no_maintenance_windows
+            else None
+        )
+
+    def gated_on_step_change_exclusion(config: AppConfig) -> str | None:
+        return (
+            "healthy_state.exclude_step_changes is False (ADR-018), so the "
+            "step-change detector reports without excluding and this "
+            "parameter cannot change the healthy population."
+            if not config.healthy_state.exclude_step_changes
+            else None
+        )
+
+    return {
+        "healthy_state.fault_pre_exclusion_days": gated_on_fault_windows,
+        "healthy_state.maintenance_post_exclusion_days": gated_on_maintenance_windows,
+        "healthy_state.step_change_exclusion_days": gated_on_step_change_exclusion,
+        "validation.step_change_window_samples": gated_on_step_change_exclusion,
+        "validation.step_change_min_magnitude_c": gated_on_step_change_exclusion,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--downloads", type=Path, default=Path(r"C:\Users\mokhles.khedhri.993\Downloads")
-    )
+    # Repo-relative, matching run_kelmarsh_experiment.py. The previous default
+    # pointed at a different machine's Downloads directory, so the script could
+    # not run anywhere but its author's workstation.
+    parser.add_argument("--downloads", type=Path, default=REPO_ROOT / "dataset")
     parser.add_argument("--artifacts", type=Path, default=REPO_ROOT / "artifacts")
-    parser.add_argument("--experiment", default="EXP-20260813-002")
+    parser.add_argument(
+        "--experiment",
+        default=None,
+        help="Experiment directory to write into; defaults to the latest present.",
+    )
     args = parser.parse_args()
-    out_dir = args.artifacts / args.experiment / "evaluation"
+    experiment = args.experiment or _latest_experiment(args.artifacts)
+    out_dir = args.artifacts / experiment / "evaluation"
     if not out_dir.is_dir():
         raise SystemExit(f"Experiment evaluation directory not found: {out_dir}")
 
@@ -221,16 +290,21 @@ def main() -> int:
         calls.append({"config_hash": key})
         return cache[key]
 
-    report = run_sensitivity(base_config, cached_runner, lambda outcome: str(outcome["label"]))
+    report = run_sensitivity(
+        base_config,
+        cached_runner,
+        lambda outcome: str(outcome["label"]),
+        applicability=applicability_checks(inputs),
+    )
 
     lim_ids = report.append_flips(
         REPO_ROOT / "docs" / "LIMITATIONS.md",
-        source=f"M-27 sensitivity suite, {args.experiment} base configuration",
+        source=f"M-27 sensitivity suite, {experiment} base configuration",
     )
 
     schema = default_schema()
     payload = {
-        "experiment_id": args.experiment,
+        "experiment_id": experiment,
         "created_at_utc": datetime.now(UTC).isoformat(),
         "design": {
             "approved_by": "author, 2026-08-13 (dedupe; per-config re-match at 10 FA/ty; "
@@ -251,10 +325,16 @@ def main() -> int:
 
     print(f"\nUnique runs: {len(cache)} of {len(calls)} runner calls")
     for sweep_result in report.sweeps:
-        flag = "FLIPS" if sweep_result.conclusion_flips else "stable"
-        print(f"\n{sweep_result.parameter} [{flag}]")
+        print(f"\n{sweep_result.parameter} [{sweep_result.status}]")
+        if sweep_result.inapplicable_reason:
+            print(f"  (no lever on this run) {sweep_result.inapplicable_reason}")
         for value, conclusion in zip(sweep_result.values, sweep_result.conclusions, strict=True):
             print(f"  {value}: {conclusion}")
+    if report.inapplicable_parameters():
+        print(
+            "\nNOT APPLICABLE (identical outcomes are not robustness evidence): "
+            f"{list(report.inapplicable_parameters())}"
+        )
     if lim_ids:
         print(f"\nConclusion-flip register entries appended: {lim_ids}")
     print(f"\nWritten to {out_path}")
