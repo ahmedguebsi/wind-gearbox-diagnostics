@@ -24,11 +24,21 @@ multi-target configuration"). The code path exists and is tested; it had never
 been run on real data. For a thesis whose headline contribution is
 MULTI-TARGET modelling, this is the ablation that isolates the contribution.
 
+**A6 — orthogonal common/differential modes (ADR-035).** At the measured
+cross-target residual correlation (r = 0.93-0.95) a 1-of-2 and a 2-of-2 rule
+fire on nearly the same rows, so the raw-channel sweep measures the channels,
+not the coordination rule. The rotation manufactures the independence the
+coordination premise requires. Binding conditions honoured here: statistics
+from healthy TRAINING only (a); the raw-channel operating points are reported
+FIRST (b); the modes' DETECTION value is declared UNTESTED — this arm
+characterises false-alarm behaviour (c); rotation applies AFTER normalization
+(d).
+
 Every arm is a full in-memory pipeline run via `run_pipeline`; nothing is
 persisted per arm. Results land in one JSON beside the named experiment.
 
 Usage (from backend/):
-    uv run python ../scripts/run_robustness_suite.py --arms b3 seeds multi_output
+    uv run python ../scripts/run_robustness_suite.py --arms b3 seeds multi_output orthogonal
 """
 
 from __future__ import annotations
@@ -76,7 +86,16 @@ from app.residuals.ewma import (  # noqa: E402
     GapHandling,
 )
 from app.residuals.fleet import leave_one_out_median  # noqa: E402
-from app.residuals.normalization import PartitionRef, make_normalizer  # noqa: E402
+from app.residuals.modes import (  # noqa: E402
+    MODE_COMMON,
+    MODE_DIFFERENTIAL,
+    rotate_to_modes,
+)
+from app.residuals.normalization import (  # noqa: E402
+    PartitionRef,
+    SigmaNormalizer,
+    make_normalizer,
+)
 from run_kelmarsh_experiment import kelmarsh_config, kelmarsh_inputs  # noqa: E402
 
 #: The rung ADR-025 anchors on, re-matched per arm on that arm's own healthy
@@ -114,22 +133,34 @@ def _slice_rmse(result: Any) -> dict[str, dict[str, float]]:
     }
 
 
-def _operating_point(series: list[Any], name: str, coordinated: bool) -> dict[str, Any]:
+def _operating_point(
+    series: list[Any],
+    name: str,
+    coordinated: bool,
+    *,
+    min_coordinated: int | None = None,
+    target: str | None = None,
+    full_curve: bool = False,
+) -> dict[str, Any]:
     """False-alarm curve on healthy validation, matched at the ADR-025 rung."""
     pipeline: Any
     if coordinated:
-        pipeline = CoordinatedPipeline(name, series, min_coordinated=None)
+        pipeline = CoordinatedPipeline(name, series, min_coordinated=min_coordinated)
     else:
-        pipeline = SingleSignalPipeline(name, series, target=series[0].target)
+        pipeline = SingleSignalPipeline(name, series, target=target or series[0].target)
     curve = sweep(pipeline, list(MULTIPLIER_GRID), ObservationBasis.ROW_TIME)
     multiplier = matched_multiplier(curve, FPR_RUNG)
-    return {
+    out: dict[str, Any] = {
         "pipeline": name,
         "matched_multiplier": multiplier,
         "reachable": multiplier is not None,
-        "curve_head": [p.as_dict() for p in curve.points[:3]],
-        "curve_tail": [p.as_dict() for p in curve.points[-3:]],
     }
+    if full_curve:
+        out["curve"] = [p.as_dict() for p in curve.points]
+    else:
+        out["curve_head"] = [p.as_dict() for p in curve.points[:3]]
+        out["curve_tail"] = [p.as_dict() for p in curve.points[-3:]]
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -264,6 +295,121 @@ def arm_b3(config: AppConfig, inputs: Any) -> dict[str, Any]:
 
 
 # --------------------------------------------------------------------------
+# A6 — orthogonal common/differential modes (ADR-035)
+# --------------------------------------------------------------------------
+
+
+def arm_orthogonal(config: AppConfig, inputs: Any) -> dict[str, Any]:
+    """A6: do orthogonal modes change the coordination picture (ADR-035)?
+
+    The raw-channel operating points are computed and reported FIRST (binding
+    condition b). The modes' DETECTION value is UNTESTED on this dataset —
+    what this arm measures is false-alarm behaviour (binding condition c).
+    """
+    result = run_pipeline(config, inputs)
+    source_key = config.residual.threshold_stats_source.value
+    source = PartitionRef(f"healthy_{source_key}")
+    out: dict[str, Any] = {"arm": "A6_orthogonal_modes", "operating_points": {}}
+
+    # 1. Raw-channel verdict through the identical machinery — reported FIRST.
+    raw_detector = _detector(config)
+    raw_detector.fit_control_limits(result.residuals[source_key], source)
+    raw_series, _ = raw_detector.detect(result.residuals["validation"])
+    raw_targets = sorted({s.target for s in raw_series})
+    out["operating_points"]["raw_coordinated_2of2"] = _operating_point(
+        raw_series, "raw_coordinated_2of2", coordinated=True, full_curve=True
+    )
+    out["operating_points"]["raw_coordinated_1of2"] = _operating_point(
+        raw_series, "raw_coordinated_1of2", coordinated=True, min_coordinated=1, full_curve=True
+    )
+    for raw_target in raw_targets:
+        out["operating_points"][f"raw_single_{raw_target}"] = _operating_point(
+            raw_series,
+            f"raw_single_{raw_target}",
+            coordinated=False,
+            target=raw_target,
+            full_curve=True,
+        )
+    out["raw_in_control"] = raw_detector.characterize_in_control(
+        result.residuals["validation"]
+    ).as_dict()
+
+    # 2. Per-channel standardization with TRAINING healthy statistics only
+    #    (binding condition a). ADR-035's definition reads "standardized", and
+    #    the exact-orthogonality identities require exactly unit variance on
+    #    the fitting partition — the config normalizer (MAD) does not equalize
+    #    variances, so SigmaNormalizer supplies the standardization and the
+    #    identities hold exactly on training, approximately elsewhere.
+    standardizer = SigmaNormalizer()
+    standardizer.fit(result.residuals[source_key], source)
+    standardized = {
+        partition: standardizer.transform(result.residuals[partition])
+        for partition in ("training", "validation", "test")
+    }
+
+    # 3. Rotation AFTER normalization (binding condition d); the test-partition
+    #    rotation is descriptive statistics only, never detection.
+    modes: dict[str, Any] = {}
+    out["mode_statistics"] = {}
+    for partition, standardized_frame in standardized.items():
+        mode_frame, report = rotate_to_modes(standardized_frame)
+        modes[partition] = mode_frame
+        out["mode_statistics"][partition] = report.as_dict()
+    out["adr035_expected_before_execution"] = {
+        "note": (
+            "Recorded in ADR-035 before execution, measured on EXP-20260817-001 "
+            "validation with that partition's own standardization. Under binding "
+            "condition (a) this arm standardizes with TRAINING statistics, so the "
+            "exact identities are expected on the training partition and "
+            "approximately on validation/test."
+        ),
+        "corr_common_differential": 3.07e-16,
+        "sd_common": 1.3909,
+        "sd_differential": 0.2559,
+        "variance_share": [0.967, 0.033],
+        "lag1_phi": [0.775, 0.593],
+    }
+
+    # 4. The identical normalizer family, EWMA detector and matched-FPR sweep
+    #    the NBM residual uses — the arms differ only in the monitored quantity.
+    normalizer = make_normalizer(config.residual.normalization)
+    normalizer.fit(modes[source_key], source)
+    normalized_modes = {
+        partition: normalizer.transform(modes[partition])
+        for partition in ("training", "validation")
+    }
+    detector = _detector(config)
+    detector.fit_control_limits(normalized_modes[source_key], source)
+    mode_series, _ = detector.detect(normalized_modes["validation"])
+    out["modes_in_control"] = detector.characterize_in_control(
+        normalized_modes["validation"]
+    ).as_dict()
+    out["operating_points"]["modes_coordinated_2of2"] = _operating_point(
+        mode_series, "modes_coordinated_2of2", coordinated=True, full_curve=True
+    )
+    out["operating_points"]["modes_coordinated_1of2"] = _operating_point(
+        mode_series, "modes_coordinated_1of2", coordinated=True, min_coordinated=1, full_curve=True
+    )
+    for mode in (MODE_COMMON, MODE_DIFFERENTIAL):
+        out["operating_points"][f"modes_single_{mode}"] = _operating_point(
+            mode_series, f"modes_single_{mode}", coordinated=False, target=mode, full_curve=True
+        )
+
+    out["interpretation_note"] = (
+        "ADR-035 binding condition (c): the modes' DETECTION value is UNTESTED "
+        "— with one contested labelled event this dataset cannot establish "
+        "whether the differential mode responds to real faults. This arm "
+        "characterises FALSE-ALARM behaviour only. The raw-channel verdict is "
+        "reported first (condition b); all statistics derive from healthy "
+        "training (condition a); the rotation was applied after normalization "
+        "(condition d). A HIGH differential mode means the bearing is hot "
+        "relative to its own oil bath — the bearing-specific signature the "
+        "FMEA layer could discriminate (LIM-030)."
+    )
+    return out
+
+
+# --------------------------------------------------------------------------
 # Seed variance and the multi-output ablation
 # --------------------------------------------------------------------------
 
@@ -348,7 +494,7 @@ def main() -> int:
         "--arms",
         nargs="+",
         default=["b3", "seeds", "multi_output"],
-        choices=["b3", "seeds", "multi_output"],
+        choices=["b3", "seeds", "multi_output", "orthogonal"],
     )
     parser.add_argument("--seeds", nargs="+", type=int, default=[42, 7, 2024])
     args = parser.parse_args()
@@ -392,6 +538,7 @@ def main() -> int:
         "b3": lambda: arm_b3(config, inputs),
         "seeds": lambda: arm_seeds(config, inputs, tuple(args.seeds)),
         "multi_output": lambda: arm_multi_output(config, inputs),
+        "orthogonal": lambda: arm_orthogonal(config, inputs),
     }
     for name in args.arms:
         started = time.time()
