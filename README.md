@@ -46,6 +46,87 @@ uv run pytest                # tests + coverage
 Pre-commit hooks run the same gates locally: `uv run --project backend pre-commit install`
 (run from the repository root).
 
+## Running the pipeline end to end
+
+The steps above give a green test suite on synthetic fixtures. Producing a real
+experiment needs the dataset.
+
+### 1. Obtain the data
+
+The holdings are ~4.5 GB and excluded from git, so a checkout plus the Zenodo
+download reproduces a run without editing anything. Download the Kelmarsh
+record — DOI [10.5281/zenodo.5841833](https://doi.org/10.5281/zenodo.5841833),
+CC-BY-4.0 — and unpack the year folders into `dataset/` at the repository root:
+
+```text
+dataset/
+├── Kelmarsh_SCADA_2016_3082/
+├── Kelmarsh_SCADA_2017_3083/
+├── ...
+└── Kelmarsh_SCADA_2021_3087/
+```
+
+That is the default `--downloads` location. Pass `--downloads <path>` for a copy
+held elsewhere. Provenance, licensing and access conditions:
+[`data/README.md`](data/README.md).
+
+### 2. Run the headline experiment
+
+```bash
+cd backend
+uv run python ../scripts/run_kelmarsh_experiment.py --approved-by "Name 2026-08-19"
+```
+
+Takes roughly 15–20 minutes. Two refusals are deliberate and will stop the run
+before any work happens:
+
+- **No `--approved-by`** → refuses. The predictor set, split dates and
+  alarm-window policy are author decisions, and a run that does not name its
+  approver cannot be cited (PROJECT.md §34).
+- **Uncommitted changes to tracked files** → refuses (ADR-044). The commit
+  recorded in the metadata would not describe the code that ran. Untracked files
+  do not block. `--allow-dirty` overrides for exploratory runs, which are then
+  marked as such in the stamp.
+
+### 3. Read the results
+
+Everything lands in `artifacts/EXP-YYYYMMDD-NNN/`. Start with these four:
+
+| File | What it holds |
+|------|---------------|
+| `metrics.json` | RMSE / MAE / R² / bias per model × target × period; the RQ1 slice and its exclusions; the in-control block; cross-target residual correlations |
+| `evaluation/first_run_summary.json` | Panel-bootstrap CIs with reliability flags, per-turbine Diebold–Mariano, the tuning trials, the EVENT-001 block |
+| `metadata.json` | Seeds, the multiple-comparison register, the git/library version stamp, cleaning operations, split |
+| `evaluation/regime_split.json` | Every error and detection figure split by operating regime (ADR-047) — **read this before quoting any false-alarm number** |
+
+Also written: `model/`, `predictions/`, `residuals/` (parquet), `plots/` (12
+figures), `run.log`, and the remaining `evaluation/` reports — cleaning audit,
+healthy-state report, split, normalizer stats, in-control report, condition
+diagnostics, and the EVENT-001 operator rendering.
+
+### 4. Analyses over a completed run
+
+All read stored artifacts only — no refit, seconds rather than minutes:
+
+```bash
+cd backend
+uv run python ../scripts/run_regime_split.py      --experiment EXP-YYYYMMDD-NNN
+uv run python ../scripts/make_diagnostic_plots.py --experiment EXP-YYYYMMDD-NNN
+uv run python ../scripts/run_matched_fpr_sweep.py --experiment EXP-YYYYMMDD-NNN
+```
+
+`run_regime_split.py` is the LIM-034 mitigation (ADR-047); it verifies its own
+join against the residual frame and aborts rather than report on a bad
+alignment. `run_matched_fpr_sweep.py` rebuilds the RQ1 slice membership from the
+pipeline's own code and aborts on any row-count disagreement, so it needs the
+dataset present.
+
+Further drivers: `run_eda.py` (read-only exploratory census),
+`run_nacelle_ablation.py` (ADR-027 predictor ablation),
+`diagnose_residual_dependence.py` (the ADR-034 serial-correlation diagnosis),
+`run_event001_context_series.py` and `run_event001_selected_points.py`
+(EVENT-001 case-study series).
+
 ## Phase 0.5 dataset census (read-only, facts only)
 
 ```bash
@@ -134,6 +215,7 @@ them. The runner separately persists the condition-sliced error tables to
 ## Registered comparison arms
 
 ```bash
+cd backend
 uv run python ../scripts/run_robustness_suite.py --arms b3 seeds multi_output
 uv run python ../scripts/run_matched_fpr_sweep.py       # RQ2 operating curves
 uv run python ../scripts/run_sensitivity_suite.py       # M-27 provisional sweep
