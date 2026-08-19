@@ -121,7 +121,11 @@ alignment. `run_matched_fpr_sweep.py` rebuilds the RQ1 slice membership from the
 pipeline's own code and aborts on any row-count disagreement, so it needs the
 dataset present.
 
-Further drivers: `run_eda.py` (read-only exploratory census),
+Further drivers: `make_comparison_plots.py` (three thesis figures from stored
+artifacts: RQ1 model RMSE with bootstrap CIs, the RQ2 raw-vs-modes false-alarm
+operating curves from arm A6, and the ADR-035 residual-channel geometry per
+partition — the figure that shows LIM-034/LIM-037),
+`run_eda.py` (read-only exploratory census),
 `run_nacelle_ablation.py` (ADR-027 predictor ablation),
 `diagnose_residual_dependence.py` (the ADR-034 serial-correlation diagnosis),
 `run_event001_context_series.py` and `run_event001_selected_points.py`
