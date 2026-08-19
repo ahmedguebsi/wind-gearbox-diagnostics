@@ -145,7 +145,10 @@ alignment. `run_matched_fpr_sweep.py` rebuilds the RQ1 slice membership from the
 pipeline's own code and aborts on any row-count disagreement, so it needs the
 dataset present.
 
-Further drivers: `run_eda.py` (read-only exploratory census),
+Further drivers: `run_mode_regime_split.py` (the LIM-037 mitigation artefact:
+regime-split ADR-035 mode statistics plus the differential-mode
+characterization ADR-050 rests on; cross-checks itself against the A6 arm and
+aborts on disagreement), `run_eda.py` (read-only exploratory census),
 `run_nacelle_ablation.py` (ADR-027 predictor ablation),
 `diagnose_residual_dependence.py` (the ADR-034 serial-correlation diagnosis),
 `run_event001_context_series.py` and `run_event001_selected_points.py`
@@ -350,6 +353,21 @@ Chapter 1 scope boundary already limits RQ3 to physical plausibility for this
 reason). The honest exits on record: reframe RQ3 as an architecture/mechanism
 demonstration with the discrimination gap stated, or rest discrimination on
 the differential mode — which LIM-037 now bounds to the healthy regime.
+
+A registered remediation path exists (2026-08-20, shaped by an external
+methodological review — `idea_assessment.pdf`): **ADR-049** gates
+interpretation to the NBM's fitted operating support (82.05% of monitoring is
+*eligible* — eligibility, not a success rate) with a two-kind abstention
+vocabulary, and **ADR-050** freezes, before any evaluation, a
+common/differential re-expression of the *existing* FMEA signatures, labelled
+post-hoc refinement with the v1 adverse result reported first. The measured
+basis is `evaluation/mode_regime_split.json`: the LIM-037 collapse is confined
+out-of-support (in-regime mode correlation −0.048 vs 0.860 out), the
+differential mode is stable across turbines and carries real sustained
+excursions. Target verdict if the frozen evaluation succeeds: a **bounded
+positive** — candidate mechanisms with retained ambiguity and abstention,
+never validated diagnosis (maintenance-confirmed correctness stays
+unavailable).
 
 ## Status
 

@@ -2300,3 +2300,118 @@ Fairness:          the symmetry check passed at all three lambdas (two
                    identical matched multipliers).
 Affected:          ADR-016, ADR-028, ADR-031, LIM-020, LIM-021, RQ2 reporting
                    in Chapters 4 and 5.
+
+## ADR-049 — Interpretation eligibility gate: no physical interpretation outside model support
+
+Status:            ACCEPTED (2026-08-20) — author-instructed; conditions from
+                   an external methodological review (idea_assessment.pdf,
+                   repository root, 2026-08-20) incorporated
+Question:          Should the FMEA interpretation layer (RQ3) assign physical
+                   candidate mechanisms to residuals from operating states
+                   outside the NBM's fitted support?
+Evidence:          `evaluation/regime_split.json` (LIM-034: 17.9% of
+                   monitoring rows below the 50 kW training floor carry 50.4%
+                   of the residual variance; out-of-regime bearing bias about
+                   -11.7 degC). `evaluation/mode_regime_split.json`
+                   (2026-08-20): mode correlation -0.048 in-support vs 0.860
+                   out-of-support; sd(common) 1.54 vs 6.75. A residual is
+                   diagnostically meaningful only as deviation from a
+                   trustworthy healthy prediction; where the model
+                   extrapolates, a large residual cannot safely be read as
+                   degradation.
+Decision:          Interpretation is ELIGIBLE iff the row lies within model
+                   support: active_power present and >= the EXISTING
+                   HealthyStateConfig.minimum_active_power_kw boundary
+                   (50 kW; ADR-047's regime rule). No new tunable is
+                   introduced. Outside support the layer emits a distinct
+                   abstention output R_OOD — "interpretation withheld:
+                   operating condition outside the NBM's fitted support" —
+                   which differs in kind from R5, "no gearbox-consistent
+                   thermal candidate" (valid domain, but no rule fits).
+Scope:             RQ3 ONLY. RQ2's detection pipelines, results and negative
+                   verdict are untouched (ADR-048 stands; the review's §8 and
+                   ADR-035 condition b agree).
+Language rules (binding):
+                   (a) out-of-support rows are never called "meaningless
+                       data"; the correct statement is that the NBM residual
+                       interpretation is unreliable there.
+                   (b) the in-support share (82.05% of monitoring,
+                       mode_regime_split.json) is reported as ELIGIBILITY,
+                       never as a success or interpretability rate.
+Affected:          M-22 (interpretation engine), ruleset v2 (ADR-050),
+                   LIM-028, LIM-034, LIM-037, RQ3 chapters.
+
+## ADR-050 — Common/differential coordinates operationalise the existing FMEA signatures
+
+Status:            ACCEPTED (2026-08-20) — specification FROZEN before any
+                   rule-outcome evaluation; no ruleset-v2 evaluation has been
+                   run at the time of this record
+Chronology (stated, not hidden):
+                   introduced AFTER ADR-035/arm A6 exposed that the
+                   raw-channel state representation cannot discriminate
+                   mechanisms at r = 0.93-0.95 (LIM-030), and after the
+                   mode_regime_split artefact. This is a POST-HOC
+                   METHODOLOGICAL REFINEMENT prompted by a measured
+                   collinearity problem; its results are EXPLORATORY, never
+                   the confirmatory RQ3 test. The raw-channel ruleset v1 and
+                   its adverse result are retained and reported first.
+Definition:        on per-channel sigma-standardized residuals (TRAINING
+                   healthy statistics only; ADR-035 conditions a and d):
+                     C = (z_bearing + z_oil) / sqrt(2)   common mode
+                     D = (z_bearing - z_oil) / sqrt(2)   differential mode
+                   An information-preserving rotation of the same two
+                   streams — NOT new sensors, NOT a new NBM, NOT new
+                   mechanisms.
+What changes and what does not:
+                   the FMEA taxonomy (FMEA-001..005) and its physics
+                   conditions are UNCHANGED. Ruleset v2 re-expresses each
+                   existing signature as (C-state, D-state, temporal order,
+                   persistence, load dependence); the temporal qualifiers
+                   previously carried as text (LIM-030) become mechanical.
+Frozen evaluation spec (recorded BEFORE execution):
+                   (a) C and D states come from the identical
+                       normalizer -> EWMA chain of arm A6 (config normalizer
+                       fitted on training modes; lambda = 0.2;
+                       empirically-calibrated multiplier per ADR-026);
+                   (b) persistence = detection.persistence_min_samples
+                       (3 samples), unchanged from v1;
+                   (c) "D leads C" means the first persistent D-exceedance
+                       precedes the first persistent C-exceedance within an
+                       episode by at least one sample;
+                   (d) eligibility gate = ADR-049; the output vocabulary is
+                       Type A (positive candidate), Type B (ambiguous
+                       candidate set, stated as such), Type C (R5
+                       abstention), Type D (R_OOD abstention);
+                   (e) EVENT-001 is reported as a real-data abstention case,
+                       worded "the system abstained from unsupported positive
+                       attribution" — never "correctly said I don't know".
+Caution (binding): D > 0 is not per se a bearing fault — sensor bias,
+                   thermal-lag differences, target-specific model error and
+                   operating transitions all produce it. Per-turbine
+                   idiosyncrasy is REAL in this data: Kelmarsh 5 supplies
+                   56% of the in-support 3-sigma differential excursions,
+                   all on the oil-hot side, and must be reported.
+Evidence the representation is worth evaluating
+                   (mode_regime_split.json, in-support monitoring):
+                   mode correlation -0.048; per-turbine sd 0.214-0.283 and
+                   lag-1 0.50-0.57 (stable across all six machines);
+                   differential excursions occur (0.82% of points beyond
+                   3 sigma_D, 0.24% beyond 5 sigma_D, sustained runs to 28
+                   samples ~ 4.7 h); D nearly insensitive to operating
+                   variables (|r| <= 0.10 vs power/wind, ~0 vs ambient).
+                   Corr(C,D) ~ 0 alone is NOT discrimination evidence
+                   (review §5); these measurements carry that burden.
+Synthetic injections:
+                   permitted ONLY as controlled signature-injection tests
+                   verifying software correctness, structural
+                   identifiability, sensitivity and cross-talk (review §16).
+                   NEVER labelled "diagnostic validation"; no "accepted
+                   standard method" claim unless a source in the project's
+                   literature base explicitly supports it (review §17).
+Standing limitation:
+                   n(maintenance-confirmed faults) = 0; real-world diagnostic
+                   correctness remains unvalidated regardless of the above
+                   (LIM-002, LIM-036). The target RQ3 verdict is a BOUNDED
+                   POSITIVE at most, per the review's §21 formulation.
+Affected:          NEW app/fmea ruleset v2 + modes wiring, M-22, ADR-035,
+                   ADR-049, LIM-030, LIM-037, RQ3 chapters.

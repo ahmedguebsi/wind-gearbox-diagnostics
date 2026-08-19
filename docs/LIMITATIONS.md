@@ -1233,12 +1233,22 @@ Why this matters:   the rotation was the one quantity ADR-035 identified as
 Affected RQ(s):     RQ2 (the coordination-premise repair), RQ3 (the
                     differential mode is the only discriminating quantity
                     LIM-030 identified)
-Mitigation status:  OPEN. The candidate follow-up is the ADR-047 regime
-                    split applied to the mode statistics: if the monitoring
-                    mode correlation is low in-regime and high out-of-regime,
-                    the collapse is one more consequence of LIM-034 and the
-                    in-regime slice could still carry an independent-evidence
-                    comparison. Not run; reserved to the author.
+Mitigation status:  MITIGATED IN PART (2026-08-20). The follow-up ran on
+                    author instruction: `scripts/run_mode_regime_split.py`
+                    wrote `evaluation/mode_regime_split.json`, verified
+                    equal to the A6 arm's pooled statistics and join-verified
+                    against the conditions frame. The collapse is CONFINED to
+                    the out-of-support slice: in-regime monitoring mode
+                    correlation is -0.048 (n = 607,557; sd 1.54/0.28,
+                    matching validation) against 0.860 out-of-support
+                    (n = 132,906; sd 6.75/1.73). The rotation's independence
+                    is therefore available on the 82.05% ELIGIBLE share of
+                    monitoring under the ADR-049 interpretation gate.
+                    What remains open, deliberately: eligibility is not a
+                    success rate, near-zero mode correlation alone is not
+                    discrimination evidence, and the differential mode's
+                    detection value stays UNTESTED (ADR-035 condition c).
+                    The frozen evaluation spec for ruleset v2 is ADR-050.
 Source:             `artifacts/EXP-20260818-001/evaluation/robustness_suite.json`,
                     arm `orthogonal`, 2026-08-19. ADR-035 binding conditions
                     (a)-(d) honoured; detection value UNTESTED by declaration
