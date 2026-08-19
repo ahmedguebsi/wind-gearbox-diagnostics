@@ -1031,3 +1031,106 @@ Source:             `artifacts/EXP-20260818-001/evaluation/condition_diagnostics
                     and `plots/*_residual_vs_active_power.png` (ADR-045); band
                     aggregation of `residuals/test.parquet` joined to
                     `evaluation/conditions.parquet`, 2026-08-18.
+
+## LIM-035 â€” The Chesterman dual-criterion reframing does not survive the regime split
+
+Date discovered:    2026-08-19
+Description:        NEGATIVE FINDING, recorded because it refutes a claim this
+                    project was about to make.
+                    Chesterman et al. (Wind Energy Science 8(6):893, 2023)
+                    evaluate a normal behaviour model on TWO things at once:
+                    small prediction error on healthy data and LARGE error on
+                    unhealthy data, reported as the difference. Under that
+                    criterion the thesis model appeared to win the very
+                    comparison plain RMSE says it loses â€” the 0/6 unfiltered
+                    -slice Diebold-Mariano reversal â€” because its pooled
+                    separation is by far the largest:
+
+                      pooled (NOT citable)      bearing      oil
+                      thesis                    +11.3149   +6.9669
+                      elastic_net                +5.9097   +5.4680
+                      baseline (OLS)             +5.6422   +4.9358
+
+                    Computed correctly â€” WITHIN the fitted operating regime,
+                    per ADR-047, so that "unhealthy" means degraded rather than
+                    parked â€” the ordering REVERSES and the thesis model comes
+                    LAST on both targets:
+
+                      in-regime (citable)       bearing      oil
+                      baseline (OLS)             +0.2323   +0.1884
+                      elastic_net                +0.2250   +0.1624
+                      thesis                     +0.1854   +0.0552
+
+                    The pooled advantage was entirely an artefact of
+                    extrapolation. The thesis model's larger separation was not
+                    greater sensitivity to abnormal behaviour; it was greater
+                    failure on rows below the training floor, which make up
+                    65.7% of the "unhealthy" complement (132,906 of 202,418
+                    rows).
+Consequence:        the dual-criterion reframing must NOT be used to answer the
+                    unfiltered-slice reversal. The defensible answer to that
+                    reversal is ADR-047 Consequence 1 â€” the RQ1 ordering holds
+                    in-regime, and 92.6% of the thesis model's test-slice
+                    squared error comes from 17.9% of rows outside its support.
+                    A separate reading also stands on its own: on this dataset
+                    a linear reference separates healthy from unhealthy
+                    behaviour marginally BETTER than the tuned NBM, which is a
+                    real limitation of the thesis model for detection use and
+                    is consistent with LIM-031 (the fleet-median-only detector
+                    competing) and with the B3 arm.
+Affected RQ(s):     RQ1 (how the unfiltered-slice result is explained), RQ2
+                    (the NBM's value for detection specifically)
+Mitigation status:  NOT MITIGABLE â€” it is a measurement, not a defect. Recorded
+                    so the pooled figure cannot be cited by mistake; the
+                    artifact retains it only under the key
+                    `pooled_uncorrected` with an explicit warning string.
+Source:             `artifacts/EXP-20260818-001/evaluation/regime_split.json`,
+                    key `separation_delta_pe`; ADR-047.
+
+## LIM-036 â€” The single labelled event belongs to the one failure mode this project's own literature review calls non-thermal
+
+Date discovered:    2026-08-19
+Description:        FINDING. EVENT-001 (ADR-013) is code 1860, "Oil filter gear
+                    choked" â€” a lubrication-system restriction, recorded as a
+                    Warning, with no maintenance confirmation available
+                    (LIM-002: the Comment column is empty in 0 of 57,515 rows,
+                    so the mechanism-level tier is unconstructible).
+                    Chapter 2's own Table 2.4 classifies the five monitorable
+                    gearbox failure modes. For "Lubrication system
+                    degradation" it records the documented evidence as
+                    "Mechanism documented; DIRECT SIGNALS NOT THERMAL", and the
+                    signals per published practice as "Oil condition
+                    indicators". Chapter 2 Table 2.5 maps the same mode to the
+                    SCADA signals "Oil pressure level; oil-filter status", with
+                    no CMS signal.
+                    This project models exactly two thermal channels. The one
+                    labelled event it possesses therefore belongs to the one
+                    failure mode its own literature review states is not
+                    thermally monitorable.
+                    The FMEA layer's behaviour is consistent with that: the
+                    rule that describes this mechanism, FMEA-004
+                    (`lubrication_system_degradation`), requires oil HIGH AND
+                    bearing HIGH. The matched detection is bearing LOW (EWMA
+                    -1.24) with oil normal (EWMA -1.23), and the interpreter
+                    recorded "No candidate mechanism: the anomalous pattern
+                    matched no FMEA rule."
+Why this matters:   it is a stronger and more citable explanation for the RQ3
+                    outcome than LIM-026's direction finding alone. LIM-026
+                    records THAT the match points the wrong way; this records
+                    WHY the channels could not have seen the mechanism in the
+                    first place. It also bears on the RQ3 framing choice:
+                    implementing lag and load-slope features so the FMEA
+                    qualifiers become computable would be building
+                    discrimination for a mechanism the review says thermal
+                    channels cannot resolve.
+Affected RQ(s):     RQ3 (primary), RQ2 (what the single event can validate)
+Mitigation status:  OPEN â€” reserved to the author. It is a scope/framing
+                    question (PROJECT.md Â§34), not a code defect. The candidate
+                    it most supports is reframing RQ3 as an architecture
+                    demonstration with the discrimination gap stated, which
+                    METHODOLOGY_REVIEW.md already lists as one of two honest
+                    exits.
+Source:             `backend/app/evaluation/events.py` EVENT_001 (code 1860,
+                    "Oil filter gear choked"); `mokhles_docs/Chapter_2_draft.docx`
+                    Tables 2.4 and 2.5; `backend/app/fmea/rulesets/initial_v1.yaml`
+                    FMEA-004; `artifacts/EXP-20260818-001/evaluation/event001_diagnostic.txt`.

@@ -1120,6 +1120,38 @@ Finding:           The selected multipliers (10–21σ across the PRIMARY
 Affected:          Chapter 3 (EWMA methodology discussion; the LOCKED-02
                    primary treatment is retained with its limits defended
                    empirically, not theoretically), Chapter 5.
+External corroboration (added 2026-08-19; the finding above is UNCHANGED —
+this block adds literature support that was identified in
+METHODOLOGY_REVIEW.md §3 and never recorded here):
+                   The same conclusion was reached independently, on the
+                   SAME dataset, by a different team using a DIFFERENT
+                   detector family. Fiocchi, Ladopoulou & Dellaportas
+                   (arXiv:2404.16496, 2024, rev. 2025) monitor Kelmarsh
+                   with a CUSUM chart and report that the theoretical
+                   decision interval I=5 was unusable, raising it
+                   empirically to I=15 — a threefold departure from
+                   theory. This project raised an EWMA multiplier from 3σ
+                   to 10–21σ. Two independent teams, one dataset, two
+                   detector families, one conclusion: control-chart theory
+                   does not survive contact with serially correlated
+                   10-minute SCADA residuals.
+                   The methodological anchor is older and already sits in
+                   the Chapter 2 reference list: Lu & Reynolds (1999),
+                   "EWMA Control Charts for Monitoring the Mean of
+                   Autocorrelated Processes", Journal of Quality Technology
+                   31(2):166–188.
+                   WHY THIS MATTERS FOR THE DEFENCE. Without it, the
+                   empirical multiplier reads as a threshold tuned until
+                   the numbers behaved — the worst available reading of a
+                   threshold choice, and the one Guard 4's provenance
+                   requirement exists to foreclose. With it, the multiplier
+                   is a replicated field-level finding.
+                   Figure note: this entry's "54.8×" is the inflation
+                   measured on the run current when it was closed. The
+                   corresponding figure on EXP-20260818-001 is 60.06×
+                   (ADR-030 changed the selection design between the two).
+                   The finding is unaffected; both are far beyond the 2.0×
+                   materiality threshold.
 
 ## ADR-027 — Nacelle-temperature ablation (specified before execution)
 
@@ -2108,3 +2140,128 @@ Reporting rule:    all three outcomes weaken or complicate the project's
                    and LIM-023's fleet finding were handled with.
 Affected:          EXPERIMENT_PROTOCOL §4 (B3, A8, A9 statuses), LIM-031,
                    LIM-032, Chapters 4 and 6.
+
+## ADR-047 â€” Every error and detection figure is reported split by operating regime
+
+Status:            CLOSED (2026-08-19) â€” LIM-034 mitigation (a) IMPLEMENTED.
+                   A reporting change only: no partition, no criterion, no
+                   model and no threshold is altered. The outcomes are
+                   recorded as measured, including the one that refutes the
+                   hypothesis that motivated the work (LIM-035).
+Question:          LIM-034 measured that below the healthy-state active-power
+                   floor the thesis NBM has mean residual -11.75 degC, and
+                   that those rows are 17.9% of the monitoring stream while
+                   carrying 50.4% of its residual variance. Its consequence
+                   was that NO figure aggregated over the whole stream is a
+                   statement about the model or the detector â€” it is a mixture
+                   statistic over a regime the model was fitted on and one it
+                   never saw. LIM-034 named three mitigations and recommended
+                   (a) first: report split, no new modelling.
+Decision:          Implement (a). `app/evaluation/regime.py` splits at the
+                   healthy-state floor; `scripts/run_regime_split.py` produces
+                   `evaluation/regime_split.json` from STORED ARTIFACTS ONLY.
+Why not (b) or (c): (b) gating detection on operating state is arguably
+                   forbidden by PROJECT.md Â§14 (the TEST partition stays
+                   unfiltered because anomalous rows there are the signal) and
+                   is a methodological ruling reserved to the author (Â§34).
+                   (c) modelling the parked regime explicitly is a scope
+                   extension. Neither is taken here.
+Boundary:          the regime boundary IS
+                   `HealthyStateConfig.minimum_active_power_kw` â€” the same
+                   threshold that built the training population. An
+                   independently chosen boundary would measure something other
+                   than "inside vs outside the training support". Rows with a
+                   missing power reading are OUT of regime, matching the
+                   builder's own `fillna(True)`.
+Alignment:         `conditions.parquet` is positionally aligned to the stored
+                   prediction frames, which is an ASSUMPTION, so the script
+                   proves it before use: it key-joins `residuals/test.parquet`
+                   on (timestamp, turbine_id) and requires exactly one stored
+                   model to reproduce the residual frame's prediction column
+                   row for row. On EXP-20260818-001 that model is `thesis` at
+                   max |diff| = 0.0 over 1,480,926 rows. The check earned its
+                   keep immediately â€” it caught a real defect in the first
+                   draft of the script, which compared against `baseline`.
+Measured (EXP-20260818-001, bearing target, thesis model):
+                   in-regime  607,557 rows (82.1%) RMSE 2.1867 bias -0.0893,
+                              variance share 7.4%
+                   out-regime 132,906 rows (17.9%) RMSE 16.5482 bias -11.7539,
+                              variance share 92.6%
+                   The linear references are far less concentrated: OLS
+                   23.8%/76.2%, Elastic Net 22.5%/77.5%. A flexible learner
+                   extrapolates worse than a linear one outside its support,
+                   and this is the measurement of how much worse.
+Consequence 1:     the RQ1 ordering HOLDS in-regime â€” thesis 2.1867 vs OLS
+                   2.5911 vs Elastic Net 2.5823 (bearing); 2.6967 vs 2.9387 vs
+                   2.9476 (oil). The unfiltered-slice reversal (0/6 turbines on
+                   the Diebold-Mariano test) is therefore fully explained:
+                   92.6% of the thesis model's test-slice squared error comes
+                   from 17.9% of rows outside its training support.
+Consequence 2:     the exceedance direction asymmetry is now MEASURED, not
+                   proposed. Out-of-regime exceedance rate 0.7645 against
+                   in-regime 0.1716 (4.5x), and the low:high ratio is 8.9:1 out
+                   of regime against 1.9:1 in regime. LIM-034's mechanism for
+                   the LIM-026 cold-side match is confirmed.
+Consequence 3 (the honest half): this split does NOT reduce the in-control
+                   false-alarm inflation, and cannot. The in-control block is
+                   the healthy VALIDATION partition, built with the full
+                   healthy-state criteria INCLUDING the power floor, so every
+                   row in it is in-regime already (verified: the healthy slice
+                   minimum power is 50.001 kW, zero rows below the floor). The
+                   60.06x inflation is therefore not a regime-mismatch effect,
+                   and ADR-034 (serial correlation) remains the sole
+                   explanation on record. Recorded here because the opposite
+                   was expected before measurement.
+Affected:          LIM-024, LIM-026, LIM-029, LIM-031, LIM-033, LIM-034,
+                   LIM-035, ADR-034, Chapters 4 and 5.
+
+## ADR-048 â€” The RQ2 sweep is re-run under the ADR-028 denominator; the verdict stands and hardens
+
+Status:            CLOSED (2026-08-19) â€” EXECUTION of a run the project already
+                   required. No criterion is changed: ADR-016's verdict rule
+                   and ADR-031's reporting order are applied exactly as
+                   pre-registered.
+Question:          ADR-028 unified the false-alarm denominator on row-time,
+                   ruling the previous calendar-span arithmetic defective. The
+                   only recorded RQ2 verdict had been computed under the
+                   defective denominator and its artifacts were deleted, so the
+                   project held NO citable RQ2 result at all.
+Decision:          Re-run `scripts/run_matched_fpr_sweep.py` against
+                   EXP-20260818-001. Output:
+                   `evaluation/matched_fpr_sweep.json`.
+Result (boundary 3 samples, the PRE-REGISTERED value, reported first):
+                   lambda 0.1  met 2 | not met 3 | not interpretable 1 |
+                               unreachable 3
+                   lambda 0.2  met 1 | not met 4 | not interpretable 2 |
+                               unreachable 2
+                   lambda 0.3  met 3 | not met 2 | not interpretable 2 |
+                               fewer-isolated-at-reduced-sensitivity 2
+                   Across all three lambdas: 6 met of 22 evaluable pairs. The
+                   ADR-016 criterion is PREDOMINANTLY NOT MET. The direction of
+                   the pre-registered conclusion is UNCHANGED by the
+                   denominator correction.
+Result (ADR-031 literature-anchored boundaries, POST-HOC):
+                   At lambda 0.2 the "met" verdicts vanish entirely at
+                   boundaries 10, 12 and 20 (5 not met, 2 not interpretable at
+                   each). At lambda 0.3 they fall from 3 at boundary 3 to 0 at
+                   boundaries 10 and 12. The handful of "met" verdicts at the
+                   pre-registered 30-minute boundary do not survive at the
+                   3.3-hour (Nogueira et al. 2025) or ~12-hour (CARE) values
+                   published practice uses.
+Reading:           the verdict does not flip in the project's favour at
+                   literature-standard persistence â€” it HARDENS against
+                   coordination. ADR-031 pre-committed that a flip would be a
+                   finding about the criterion's construct validity (LIM-020);
+                   no flip occurred, so LIM-020's concern is answered in the
+                   direction that strengthens the negative result.
+Standing limit:    this is a correctly-computed negative, not an answer to RQ2
+                   as posed. ADR-035 stands: at cross-target residual
+                   correlation r = 0.932-0.952 a 1-of-2 rule and a 2-of-2 rule
+                   fire on nearly the same rows, so the sweep measures the
+                   CHANNELS, not the coordination rule. LIM-034/ADR-047 add
+                   that the population swept is 17.9% out-of-regime.
+Fairness:          the symmetry check passed at all three lambdas (two
+                   identical coordinated pipelines produce identical curves and
+                   identical matched multipliers).
+Affected:          ADR-016, ADR-028, ADR-031, LIM-020, LIM-021, RQ2 reporting
+                   in Chapters 4 and 5.
