@@ -1,13 +1,38 @@
 # METHODOLOGY_REVIEW.md — Literature Position and Replicate/Adapt/Discard Record
 
-> **STATUS: PROPOSED (2026-08-16).** An independent methodological review of
-> the implemented pipeline against the 2023–2026 literature, produced after a
+> **STATUS: PROPOSED (2026-08-16); ALL SEVEN PROPOSALS SINCE RATIFIED AND
+> EXECUTED (2026-08-19).** An independent methodological review of the
+> implemented pipeline against the 2023–2026 literature, produced after a
 > source-level audit of the repository at commit `7df11f9`.
 >
 > **Nothing here is a closed decision.** The project rule stands: only the
 > author closes items, recorded in `docs/DECISIONS.md` (PROJECT.md §34). The
 > proposals in §5 are drafted in the ADR template so they can be ratified,
 > revised, or rejected without rewriting them.
+>
+> **Execution log (added 2026-08-19; this document is otherwise unchanged, so
+> it remains the record of what was recommended BEFORE the results were
+> known):**
+> - P-1 row-time denominator → ADR-028, and the sweep re-run under it →
+>   **ADR-048**. The RQ2 verdict direction was unchanged by the correction.
+> - P-2 selection/calibration separation → ADR-030. Residual concern registered
+>   as LIM-025.
+> - P-3 per-turbine bootstrap and DM → implemented. It **strengthened** RQ1
+>   rather than weakening it, contrary to the prediction in §5.
+> - P-4 persistence at 12 and 20 → ADR-031, measured in **ADR-048**: the verdict
+>   hardens against coordination; LIM-020's concern is answered.
+> - P-5 per-turbine residual statistics → measured (centre spread 0.87–0.93
+>   pooled scales); pooling **still not justified or abandoned** — the one
+>   proposal that remains genuinely open.
+> - P-6 cross-target residual correlation → ADR-035. r = 0.932–0.952, which
+>   falsified RQ2's premise.
+> - P-7 Elastic Net → ADR-032. The thesis model still wins 6/6 on bearing.
+> - §4 "Add" table: fleet-median-only detector → **DONE** (B3, ADR-046, and it
+>   competes); three-seed variance check → **DONE** (A9, margin holds);
+>   CARE-style decomposition → **still not done**; upstream lag features →
+>   still not done.
+> - §3's note that the CUSUM convergence "should be cited" in ADR-026 → **done
+>   2026-08-19**, as an additive external-corroboration block.
 
 ---
 

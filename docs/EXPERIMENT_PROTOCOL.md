@@ -107,7 +107,7 @@ produces numbers without evidence and should not be run.
 | A2 | Fleet-relative residuals, leave-one-out median | RQ2, LIM-023 | REGISTERED (ADR-029) — implemented, default off, **not run** |
 | A3 | Upstream lag features vs none | RQ1 | PROPOSED |
 | A4 | Per-turbine vs pooled residual statistics | RQ2 | MEASURED, not decided. `residual_diagnostics` reports centre spread at 0.87–0.93 pooled scales; P-5 ("justify or abandon pooling") remains open |
-| A5 | Coordination threshold 1-of-2 vs 2-of-2 at matched rates | RQ2 | **DONE** (matched-FPR sweep) — pre-ADR-028 denominator; must be re-run |
+| A5 | Coordination threshold 1-of-2 vs 2-of-2 at matched rates | RQ2 | **DONE 2026-08-19** (ADR-048) — re-run under the ADR-028 row-time denominator on EXP-20260818-001. **Outcome: the ADR-016 criterion is predominantly NOT MET** — 6 met of 22 evaluable pairs across λ ∈ {0.1, 0.2, 0.3}. The denominator correction did not change the direction of the pre-registered conclusion. Symmetry check passed at all three λ |
 | A6 | Orthogonal common/differential modes vs raw channels | RQ2, RQ3 | PROPOSED (ADR-035) — registered, `app/residuals/modes.py` not implemented |
 | A7 | Block-bootstrap vs analytic EWMA control limits | RQ2 detection validity | PROPOSED (ADR-034) — registered, not run |
 | A8 | Multi-output vs one-model-per-target | RQ1 | **DONE 2026-08-18** (ADR-046) — `--arms multi_output`. **Outcome: indistinguishable** — bearing 2.1647 vs 2.1611, oil 2.6904 vs 2.7155; each wins one target, both margins an order of magnitude below the CI half-width. The headline architectural choice buys no accuracy. Registered as LIM-032 |
@@ -119,7 +119,8 @@ produces numbers without evidence and should not be run.
 |----|-----------|--------|
 | S1 | M-27 suite over the 11 provisional parameters | **DONE** |
 | S2 | Isolated/sustained boundary at 2/3/5/10 samples | **DONE** (exploratory) |
-| S3 | Boundary extended to 12 and 20 samples | PROPOSED — literature-anchored values |
+| S3 | Boundary extended to 12 and 20 samples | **DONE 2026-08-19** (ADR-048) — literature-anchored values (Nogueira et al. 2025: 20 samples; CARE: 72). **Outcome: the verdict does not flip — it hardens.** At λ=0.2 the "met" verdicts vanish entirely at boundaries 10, 12 and 20; at λ=0.3 they fall from 3 to 0. Answers the LIM-020 construct-validity concern |
+| S4 | Every error and detection figure split by operating regime | **DONE 2026-08-19** (ADR-047) — LIM-034 mitigation (a). `scripts/run_regime_split.py`, artifact-only. **Outcome: the RQ1 ordering holds in-regime** (thesis 2.1867 vs OLS 2.5911 bearing); the unfiltered-slice DM reversal is explained (92.6% of thesis test-slice squared error from 17.9% of rows); the direction asymmetry is measured (out-of-regime low:high 8.9:1 vs in-regime 1.9:1). **It does NOT reduce the in-control inflation and cannot** — that block is in-regime by construction. Registered as LIM-035 |
 
 ### Explicitly NOT commissioned
 
@@ -148,7 +149,31 @@ turbines; AUC-ROC or AUC-PR reporting. Reasons are recorded in
 
 ## 6. Proposed changes to this protocol
 
-Each requires an author ruling before it binds. Full reasoning and literature
+> **STATUS (updated 2026-08-19): all seven are RATIFIED AND EXECUTED.** The
+> table below is retained unchanged as the record of what was proposed and
+> what effect was predicted BEFORE measurement — which is the point of writing
+> predictions down. Ratifying ADRs: P-1 → ADR-028, P-2 → ADR-030,
+> P-3 → ADR-029/§P-3 wiring, P-4 → ADR-031, P-5 → measured (A4, still
+> undecided), P-6 → ADR-035, P-7 → ADR-032.
+>
+> **Predictions scored against measurement:**
+> - **P-1 held.** Denominator unified; the RQ2 verdict direction was UNCHANGED
+>   by the correction (ADR-048), so the defect was real but not verdict-bearing.
+> - **P-3 held.** Panel intervals widened per turbine — but the significance
+>   claim did NOT weaken as predicted: the oil-target CIs went from overlapping
+>   to DISJOINT, and two bearing-target BASELINE intervals were disqualified for
+>   too few blocks. The correction strengthened RQ1.
+> - **P-4 resolved against its own hedge.** It predicted the boundary "may
+>   change the RQ2 verdict". It does not change it — it HARDENS it (ADR-048).
+> - **P-6 held exactly.** r = 0.932–0.952 (ADR-035): no metric changed, and the
+>   meaning of the RQ2 result changed completely.
+> - **P-7 held.** The margin narrowed against Elastic Net relative to OLS, and
+>   the thesis model still wins 6/6 turbines on bearing (p ≤ 8.88e−16).
+>
+> **P-1, P-3 and P-6 were marked blocking for any cited result. All three are
+> now discharged**, which is what makes the ADR-048 verdict citable.
+
+Each required an author ruling before it bound. Full reasoning and literature
 basis in `docs/METHODOLOGY_REVIEW.md`.
 
 | # | Proposed change | Reason | Expected effect on reported numbers |

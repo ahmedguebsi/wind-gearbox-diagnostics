@@ -174,7 +174,7 @@ research instrument.
 
 Phase 0.5 dataset due-diligence gate **APPROVED 2026-08-12** (ADR-015); see
 [`docs/DATASET_DUE_DILIGENCE.md`](docs/DATASET_DUE_DILIGENCE.md). Decisions
-ADR-001…ADR-045 recorded; queue Groups A and B closed, **Group C (D-08…D-14)
+ADR-001…ADR-048 recorded; queue Groups A and B closed, **Group C (D-08…D-14)
 open — four of them High viva risk (D-08, D-09, D-10, D-11), so the queue's
 own stop condition is not yet met.** Artifacts are excluded from git by design
 (PROJECT.md §15), which means a deleted experiment leaves only its prose:
@@ -189,9 +189,18 @@ Current methodological review and the frozen experiment protocol:
 These are recorded here rather than only in the registers, because a reader
 starts at the README:
 
-- **RQ2 is not currently citable.** ADR-028 unified the false-alarm denominator
-  on row-time and `docs/EXPERIMENT_PROTOCOL.md` §6 marks that correction
-  blocking for any cited result. The sweep has not been re-run under it.
+- **RQ2 has a citable verdict, and it is negative.** The sweep was re-run on
+  2026-08-19 under the ADR-028 row-time denominator (ADR-048): the ADR-016
+  criterion is **predominantly NOT MET** — 6 met of 22 evaluable matched pairs
+  across λ ∈ {0.1, 0.2, 0.3}. The denominator correction did not change the
+  direction of the pre-registered conclusion. At the ADR-031 literature-anchored
+  persistence boundaries (10/12/20 samples) the "met" verdicts vanish entirely
+  at λ=0.2, so the negative **hardens** rather than flips.
+- **RQ2 as posed is still not answered by that verdict.** At the measured
+  cross-target residual correlation (r = 0.932–0.952) a 1-of-2 and a 2-of-2 rule
+  fire on nearly the same rows, so the sweep measures the *channels*, not the
+  coordination rule (ADR-035). LIM-034/ADR-047 add that the swept population is
+  17.9% outside the model's fitted operating regime.
 - **ADR-042 and ADR-034 are PROPOSED**, so the EWMA control limits remain
   empirically calibrated quantile knobs (ADR-026), not control limits.
 - **LIM-026**: the single labelled event's matched detection is a cold-side
@@ -204,3 +213,15 @@ starts at the README:
   beats it on the oil target.
 - **LIM-032**: the multi-target architecture contributes no measurable accuracy
   over per-target modelling.
+- **LIM-034 / ADR-047**: 17.9% of the monitoring stream sits below the training
+  power floor and carries 50.4% of the residual variance. Every error and
+  detection figure is now reported split by operating regime. The RQ1 ordering
+  holds in-regime; the unfiltered-slice Diebold-Mariano reversal is explained by
+  the split, not by model quality.
+- **LIM-035**: the Chesterman dual-criterion (Δ = RMSE unhealthy − RMSE healthy)
+  reframing does NOT rescue the unfiltered-slice result. Computed correctly
+  within regime the ordering reverses and the thesis model comes last. The
+  pooled figure that appeared favourable was extrapolation, not sensitivity.
+- **LIM-036**: EVENT-001 (code 1860, "Oil filter gear choked") belongs to the one
+  failure mode Chapter 2's own Table 2.4 records as having "direct signals not
+  thermal". The project models only thermal channels.

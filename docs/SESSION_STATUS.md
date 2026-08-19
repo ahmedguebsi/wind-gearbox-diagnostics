@@ -4,8 +4,9 @@
 > 2026-08-18).** This file describes the repository as it stood on
 > 2026-08-12 and is retained as the handoff record of that session, not
 > corrected in place. Everything below is superseded on at least these
-> points: the suite is now 504 tests (not 378); the schema is 1.3.0 (not
-> 1.2.0); decisions run to ADR-045 (not ADR-017); D-07 is CLOSED (ADR-023);
+> points: the suite is now 542 tests at 95.50% coverage (not 378); the schema
+> is 1.3.0 (not 1.2.0); decisions run to ADR-048 and limitations to LIM-036
+> (not ADR-017); D-07 is CLOSED (ADR-023);
 > five experiments have been run since. Current state lives in
 > [`DECISIONS.md`](DECISIONS.md), [`LIMITATIONS.md`](LIMITATIONS.md),
 > [`EXPERIMENT_PROTOCOL.md`](EXPERIMENT_PROTOCOL.md) and the README.

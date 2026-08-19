@@ -548,6 +548,24 @@ Robustness (author-accepted 2026-08-13): the exploratory boundary
                    boundaries; only the two met points are unstable. The
                    pre-registered verdict is therefore not an artefact of
                    the 3-sample boundary choice.
+RE-MEASURED (2026-08-19, ADR-048) — CITE ADR-048, NOT THE FIGURES ABOVE:
+                   the Outcome block records EXP-20260813-002 under the
+                   false-alarm denominator ADR-028 later ruled defective,
+                   and that run's artifacts have since been deleted. The
+                   sweep was re-run on EXP-20260818-001 under the corrected
+                   row-time denominator. The CRITERION and the VERDICT RULE
+                   are unchanged; only the arithmetic underneath them is.
+                   Restated result: PREDOMINANTLY NOT MET, 6 met of 22
+                   evaluable pairs (was 2 of 24). The direction of the
+                   pre-registered conclusion is UNCHANGED by the correction
+                   — which is the substantive point: the denominator defect
+                   was real but not verdict-bearing.
+                   The Robustness block above is EXTENDED, not contradicted:
+                   ADR-031 added boundaries 12 and 20, and at λ=0.2 the met
+                   verdicts vanish entirely at 10, 12 and 20. "Only the met
+                   points are unstable" is confirmed at the literature-
+                   anchored boundaries, and they destabilise AGAINST
+                   coordination.
 
 ## ADR-017 — Event-matching window
 
@@ -2141,9 +2159,9 @@ Reporting rule:    all three outcomes weaken or complicate the project's
 Affected:          EXPERIMENT_PROTOCOL §4 (B3, A8, A9 statuses), LIM-031,
                    LIM-032, Chapters 4 and 6.
 
-## ADR-047 â€” Every error and detection figure is reported split by operating regime
+## ADR-047 — Every error and detection figure is reported split by operating regime
 
-Status:            CLOSED (2026-08-19) â€” LIM-034 mitigation (a) IMPLEMENTED.
+Status:            CLOSED (2026-08-19) — LIM-034 mitigation (a) IMPLEMENTED.
                    A reporting change only: no partition, no criterion, no
                    model and no threshold is altered. The outcomes are
                    recorded as measured, including the one that refutes the
@@ -2153,7 +2171,7 @@ Question:          LIM-034 measured that below the healthy-state active-power
                    that those rows are 17.9% of the monitoring stream while
                    carrying 50.4% of its residual variance. Its consequence
                    was that NO figure aggregated over the whole stream is a
-                   statement about the model or the detector â€” it is a mixture
+                   statement about the model or the detector — it is a mixture
                    statistic over a regime the model was fitted on and one it
                    never saw. LIM-034 named three mitigations and recommended
                    (a) first: report split, no new modelling.
@@ -2161,13 +2179,13 @@ Decision:          Implement (a). `app/evaluation/regime.py` splits at the
                    healthy-state floor; `scripts/run_regime_split.py` produces
                    `evaluation/regime_split.json` from STORED ARTIFACTS ONLY.
 Why not (b) or (c): (b) gating detection on operating state is arguably
-                   forbidden by PROJECT.md Â§14 (the TEST partition stays
+                   forbidden by PROJECT.md §14 (the TEST partition stays
                    unfiltered because anomalous rows there are the signal) and
-                   is a methodological ruling reserved to the author (Â§34).
+                   is a methodological ruling reserved to the author (§34).
                    (c) modelling the parked regime explicitly is a scope
                    extension. Neither is taken here.
 Boundary:          the regime boundary IS
-                   `HealthyStateConfig.minimum_active_power_kw` â€” the same
+                   `HealthyStateConfig.minimum_active_power_kw` — the same
                    threshold that built the training population. An
                    independently chosen boundary would measure something other
                    than "inside vs outside the training support". Rows with a
@@ -2180,7 +2198,7 @@ Alignment:         `conditions.parquet` is positionally aligned to the stored
                    model to reproduce the residual frame's prediction column
                    row for row. On EXP-20260818-001 that model is `thesis` at
                    max |diff| = 0.0 over 1,480,926 rows. The check earned its
-                   keep immediately â€” it caught a real defect in the first
+                   keep immediately — it caught a real defect in the first
                    draft of the script, which compared against `baseline`.
 Measured (EXP-20260818-001, bearing target, thesis model):
                    in-regime  607,557 rows (82.1%) RMSE 2.1867 bias -0.0893,
@@ -2191,7 +2209,7 @@ Measured (EXP-20260818-001, bearing target, thesis model):
                    23.8%/76.2%, Elastic Net 22.5%/77.5%. A flexible learner
                    extrapolates worse than a linear one outside its support,
                    and this is the measurement of how much worse.
-Consequence 1:     the RQ1 ordering HOLDS in-regime â€” thesis 2.1867 vs OLS
+Consequence 1:     the RQ1 ordering HOLDS in-regime — thesis 2.1867 vs OLS
                    2.5911 vs Elastic Net 2.5823 (bearing); 2.6967 vs 2.9387 vs
                    2.9476 (oil). The unfiltered-slice reversal (0/6 turbines on
                    the Diebold-Mariano test) is therefore fully explained:
@@ -2215,9 +2233,9 @@ Consequence 3 (the honest half): this split does NOT reduce the in-control
 Affected:          LIM-024, LIM-026, LIM-029, LIM-031, LIM-033, LIM-034,
                    LIM-035, ADR-034, Chapters 4 and 5.
 
-## ADR-048 â€” The RQ2 sweep is re-run under the ADR-028 denominator; the verdict stands and hardens
+## ADR-048 — The RQ2 sweep is re-run under the ADR-028 denominator; the verdict stands and hardens
 
-Status:            CLOSED (2026-08-19) â€” EXECUTION of a run the project already
+Status:            CLOSED (2026-08-19) — EXECUTION of a run the project already
                    required. No criterion is changed: ADR-016's verdict rule
                    and ADR-031's reporting order are applied exactly as
                    pre-registered.
@@ -2249,7 +2267,7 @@ Result (ADR-031 literature-anchored boundaries, POST-HOC):
                    3.3-hour (Nogueira et al. 2025) or ~12-hour (CARE) values
                    published practice uses.
 Reading:           the verdict does not flip in the project's favour at
-                   literature-standard persistence â€” it HARDENS against
+                   literature-standard persistence — it HARDENS against
                    coordination. ADR-031 pre-committed that a flip would be a
                    finding about the criterion's construct validity (LIM-020);
                    no flip occurred, so LIM-020's concern is answered in the

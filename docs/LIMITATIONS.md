@@ -470,6 +470,21 @@ Affected RQ(s):     RQ2 (the primary criterion's construct validity)
 Mitigation status:  ACCEPTED (author ruling 2026-08-13 — the verdict
                     stands; the interaction is discussed in Chapter 5 as
                     a limitation of the criterion design)
+Answered by measurement (2026-08-19, ADR-048): the concern recorded here was
+                    that the 3-sample boundary might be carrying the verdict.
+                    It is not. Under the corrected ADR-028 denominator the
+                    ADR-031 boundary sweep shows the verdict does NOT flip at
+                    literature-anchored persistence — it HARDENS. At λ=0.2 the
+                    "met" verdicts vanish entirely at 10, 12 and 20 samples
+                    (5 not met, 2 not interpretable at each); at λ=0.3 they
+                    fall from 3 at boundary 3 to 0 at boundaries 10 and 12.
+                    The interaction described above is real, but it works
+                    AGAINST coordination only at the short pre-registered
+                    boundary; at published-practice boundaries coordination
+                    fails the criterion outright. This strengthens the
+                    pre-registered negative rather than qualifying it.
+Source (addendum):  `artifacts/EXP-20260818-001/evaluation/matched_fpr_sweep.json`,
+                    key `exploratory_boundary_sensitivity`.
 Source:             EXP-20260813-002 matched_fpr_sweep.json; author
                     ruling 2026-08-13
 
@@ -605,6 +620,21 @@ Mitigation status:  OPEN — diagnosed and addressed by ADR-034 (PROPOSED).
                     ADR-034 rules for block-bootstrap empirical limits and
                     rejects prewhitening. Reproduce with
                     scripts/diagnose_residual_dependence.py.
+Regime mismatch RULED OUT as a contributor (2026-08-19, ADR-047 Consequence 3):
+                    LIM-034 raised the possibility that this inflation is a
+                    mixture effect — a tight trained-regime component plus a
+                    wide untrained-regime one. It is not, and cannot be. This
+                    rate is measured on the healthy VALIDATION block, which is
+                    built with the full healthy-state criteria INCLUDING the
+                    active-power floor, so every row in it is in-regime by
+                    construction (verified: minimum power 50.001 kW, zero rows
+                    below the floor). The regime split of ADR-047 does not
+                    reduce this figure and no future split will. ADR-034
+                    (serial correlation) stands as the SOLE explanation on
+                    record, and is now also corroborated externally — see the
+                    ADR-026 addendum (Fiocchi et al. raised a CUSUM decision
+                    interval from theoretical I=5 to empirical I=15 on this
+                    same dataset).
 Source:             M-20 empirical in-control characterization, experiment EXP-20260817-001
 
 ## LIM-025 — Threshold statistics are fitted on data containing the tuning block
@@ -948,7 +978,11 @@ Source:             `artifacts/EXP-20260817-001/evaluation/robustness_suite.json
 Date discovered:    2026-08-18
 Description:        EWMA in-control false-alarm inflation: empirical rate 0.16214 vs i.i.d. theoretical 0.00270 (60.1x) on the healthy validation block — serial correlation invalidates the theoretical ARL (risk R4); control limits may require widening.
 Affected RQ(s):     RQ2 (detection thresholds; risk R4)
-Mitigation status:  OPEN — widen limits or justify empirically (PROJECT.md §23)
+Mitigation status:  OPEN — widen limits or justify empirically (PROJECT.md §23).
+                    This is the EXP-20260818-001 instance of LIM-024; the
+                    diagnosis, the ADR-047 ruling-out of regime mismatch, and
+                    the ADR-026 external corroboration all apply verbatim and
+                    are recorded once, under LIM-024.
 Source:             M-20 empirical in-control characterization, experiment EXP-20260818-001
 
 ## LIM-034 — Half the monitoring residual variance comes from 18% of rows the model never trained on
@@ -1016,23 +1050,42 @@ Design tension:     PROJECT.md §13 builds the healthy population above a 50 kW
 Affected RQ(s):     RQ1 (what the unfiltered-period metrics measure), RQ2 (every
                     false-alarm and detection claim), RQ3 (alert volume and the
                     direction of what is alerted on)
-Mitigation status:  OPEN, and now cheap to act on. Three candidates, all
+Mitigation status:  PARTIALLY MITIGATED (2026-08-19, ADR-047) — option (a) is
+                    IMPLEMENTED. Three candidates were named, all
                     methodological and therefore reserved to the author:
                     (a) report detection results SPLIT by in-regime and
-                        out-of-regime rows — no new modelling, immediate;
+                        out-of-regime rows — no new modelling, immediate.
+                        **DONE**: `app/evaluation/regime.py` and
+                        `scripts/run_regime_split.py` produce
+                        `evaluation/regime_split.json`. See ADR-047 for the
+                        measured split and LIM-035 for the one hypothesis it
+                        refuted.
                     (b) gate detection on operating state, which PROJECT.md §14
-                        arguably forbids and which therefore needs a ruling;
+                        arguably forbids and which therefore needs a ruling.
+                        STILL OPEN — not taken; it remains the author's call.
                     (c) model the parked/idling regime explicitly rather than
-                        excluding it, which is a scope extension.
-                    (a) is recommended first: it costs one analysis pass and
-                    would let every RQ2 number be restated as a property of the
-                    detector rather than of the population it was pointed at.
+                        excluding it, which is a scope extension. STILL OPEN.
+                    WHAT (a) DELIVERED: the RQ1 ordering is confirmed to hold
+                    in-regime, the unfiltered-slice Diebold-Mariano reversal is
+                    explained (92.6% of the thesis model's test-slice squared
+                    error comes from 17.9% of rows outside its support), and
+                    the direction asymmetry is now measured — out-of-regime
+                    low:high 8.9:1 against in-regime 1.9:1.
+                    WHAT (a) DID NOT DELIVER, against expectation: it does not
+                    reduce the in-control false-alarm inflation and cannot. See
+                    LIM-024 and ADR-047 Consequence 3 — the in-control block is
+                    already in-regime by construction, so the aspiration
+                    recorded here on 2026-08-18, that (a) "would let every RQ2
+                    number be restated as a property of the detector", was
+                    OVERSTATED. It restates the TEST-stream figures; the
+                    in-control rate is untouched and belongs to ADR-034.
 Source:             `artifacts/EXP-20260818-001/evaluation/condition_diagnostics.json`
                     and `plots/*_residual_vs_active_power.png` (ADR-045); band
                     aggregation of `residuals/test.parquet` joined to
-                    `evaluation/conditions.parquet`, 2026-08-18.
+                    `evaluation/conditions.parquet`, 2026-08-18. Mitigation (a):
+                    `evaluation/regime_split.json` (ADR-047), 2026-08-19.
 
-## LIM-035 â€” The Chesterman dual-criterion reframing does not survive the regime split
+## LIM-035 — The Chesterman dual-criterion reframing does not survive the regime split
 
 Date discovered:    2026-08-19
 Description:        NEGATIVE FINDING, recorded because it refutes a claim this
@@ -1042,8 +1095,8 @@ Description:        NEGATIVE FINDING, recorded because it refutes a claim this
                     small prediction error on healthy data and LARGE error on
                     unhealthy data, reported as the difference. Under that
                     criterion the thesis model appeared to win the very
-                    comparison plain RMSE says it loses â€” the 0/6 unfiltered
-                    -slice Diebold-Mariano reversal â€” because its pooled
+                    comparison plain RMSE says it loses — the 0/6 unfiltered
+                    -slice Diebold-Mariano reversal — because its pooled
                     separation is by far the largest:
 
                       pooled (NOT citable)      bearing      oil
@@ -1051,9 +1104,9 @@ Description:        NEGATIVE FINDING, recorded because it refutes a claim this
                       elastic_net                +5.9097   +5.4680
                       baseline (OLS)             +5.6422   +4.9358
 
-                    Computed correctly â€” WITHIN the fitted operating regime,
+                    Computed correctly — WITHIN the fitted operating regime,
                     per ADR-047, so that "unhealthy" means degraded rather than
-                    parked â€” the ordering REVERSES and the thesis model comes
+                    parked — the ordering REVERSES and the thesis model comes
                     LAST on both targets:
 
                       in-regime (citable)       bearing      oil
@@ -1069,7 +1122,7 @@ Description:        NEGATIVE FINDING, recorded because it refutes a claim this
                     rows).
 Consequence:        the dual-criterion reframing must NOT be used to answer the
                     unfiltered-slice reversal. The defensible answer to that
-                    reversal is ADR-047 Consequence 1 â€” the RQ1 ordering holds
+                    reversal is ADR-047 Consequence 1 — the RQ1 ordering holds
                     in-regime, and 92.6% of the thesis model's test-slice
                     squared error comes from 17.9% of rows outside its support.
                     A separate reading also stands on its own: on this dataset
@@ -1080,18 +1133,18 @@ Consequence:        the dual-criterion reframing must NOT be used to answer the
                     competing) and with the B3 arm.
 Affected RQ(s):     RQ1 (how the unfiltered-slice result is explained), RQ2
                     (the NBM's value for detection specifically)
-Mitigation status:  NOT MITIGABLE â€” it is a measurement, not a defect. Recorded
+Mitigation status:  NOT MITIGABLE — it is a measurement, not a defect. Recorded
                     so the pooled figure cannot be cited by mistake; the
                     artifact retains it only under the key
                     `pooled_uncorrected` with an explicit warning string.
 Source:             `artifacts/EXP-20260818-001/evaluation/regime_split.json`,
                     key `separation_delta_pe`; ADR-047.
 
-## LIM-036 â€” The single labelled event belongs to the one failure mode this project's own literature review calls non-thermal
+## LIM-036 — The single labelled event belongs to the one failure mode this project's own literature review calls non-thermal
 
 Date discovered:    2026-08-19
 Description:        FINDING. EVENT-001 (ADR-013) is code 1860, "Oil filter gear
-                    choked" â€” a lubrication-system restriction, recorded as a
+                    choked" — a lubrication-system restriction, recorded as a
                     Warning, with no maintenance confirmation available
                     (LIM-002: the Comment column is empty in 0 of 57,515 rows,
                     so the mechanism-level tier is unconstructible).
@@ -1124,8 +1177,8 @@ Why this matters:   it is a stronger and more citable explanation for the RQ3
                     discrimination for a mechanism the review says thermal
                     channels cannot resolve.
 Affected RQ(s):     RQ3 (primary), RQ2 (what the single event can validate)
-Mitigation status:  OPEN â€” reserved to the author. It is a scope/framing
-                    question (PROJECT.md Â§34), not a code defect. The candidate
+Mitigation status:  OPEN — reserved to the author. It is a scope/framing
+                    question (PROJECT.md §34), not a code defect. The candidate
                     it most supports is reframing RQ3 as an architecture
                     demonstration with the discrimination gap stated, which
                     METHODOLOGY_REVIEW.md already lists as one of two honest
