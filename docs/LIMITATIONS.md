@@ -1187,3 +1187,59 @@ Source:             `backend/app/evaluation/events.py` EVENT_001 (code 1860,
                     "Oil filter gear choked"); `mokhles_docs/Chapter_2_draft.docx`
                     Tables 2.4 and 2.5; `backend/app/fmea/rulesets/initial_v1.yaml`
                     FMEA-004; `artifacts/EXP-20260818-001/evaluation/event001_diagnostic.txt`.
+
+## LIM-037 — The manufactured mode orthogonality collapses on the monitoring stream
+
+Date discovered:    2026-08-19
+Description:        FINDING, from the ADR-035 orthogonal-mode arm
+                    (`--arms orthogonal`, base EXP-20260818-001), executed on
+                    author instruction 2026-08-19.
+                    Where the standardization statistics come from, the
+                    rotation behaves exactly as ADR-035 recorded IN ADVANCE:
+                    corr(common, differential) = 9.1e-17 on training (machine
+                    zero) and -0.065 on healthy validation; sd(common) 1.390
+                    and sd(differential) 0.261 against the predicted
+                    sqrt(1±r) identities; variance share 96.6% / 3.4%; lag-1
+                    phi 0.78 / 0.53.
+                    On the MONITORING stream the orthogonality is gone: the
+                    two modes correlate at r = 0.835, both dispersions
+                    inflate (sd 4.00 and 1.08 against 1.47 and 0.27 on
+                    validation), and both modes become almost perfectly
+                    persistent (lag-1 0.963 / 0.960). A rotation with
+                    training-frozen coefficients diagonalizes only the
+                    covariance it was fitted to; the monitoring stream's
+                    out-of-regime variance (LIM-034: 17.9% of rows below the
+                    training power floor carrying 50.4% of the residual
+                    variance) loads on both modes and re-correlates them.
+Why this matters:   the rotation was the one quantity ADR-035 identified as
+                    able to supply the independent evidence RQ2's
+                    coordination premise requires. The arm shows it supplies
+                    that independence IN-CONTROL — where the coordination
+                    rule now demonstrably does work: 2-of-2 over the modes
+                    reaches the 10 FA/turbine-year rung at multiplier 4.54
+                    against 12.62 for 1-of-2, where the raw channels gave
+                    10.76 against 12.96, nearly indistinguishable — but NOT
+                    on the stream where detection actually happens.
+                    Independent-evidence coordination on this dataset is a
+                    healthy-regime property, not a monitoring property.
+                    Secondary observations: pooled in-control inflation is
+                    slightly worse for the modes (67.7x) than for the raw
+                    channels (60.1x) on the identical validation block, and
+                    every pipeline containing the differential mode never
+                    reaches zero false alarms even at multiplier 40
+                    (0.76 FA/ty) — heavy-tailed bearing-vs-oil divergences
+                    survive any credible limit (unscreened predictor/target
+                    artefacts, LIM-018, are a candidate explanation).
+Affected RQ(s):     RQ2 (the coordination-premise repair), RQ3 (the
+                    differential mode is the only discriminating quantity
+                    LIM-030 identified)
+Mitigation status:  OPEN. The candidate follow-up is the ADR-047 regime
+                    split applied to the mode statistics: if the monitoring
+                    mode correlation is low in-regime and high out-of-regime,
+                    the collapse is one more consequence of LIM-034 and the
+                    in-regime slice could still carry an independent-evidence
+                    comparison. Not run; reserved to the author.
+Source:             `artifacts/EXP-20260818-001/evaluation/robustness_suite.json`,
+                    arm `orthogonal`, 2026-08-19. ADR-035 binding conditions
+                    (a)-(d) honoured; detection value UNTESTED by declaration
+                    (condition c).

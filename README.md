@@ -217,6 +217,7 @@ them. The runner separately persists the condition-sliced error tables to
 ```bash
 cd backend
 uv run python ../scripts/run_robustness_suite.py --arms b3 seeds multi_output
+uv run python ../scripts/run_robustness_suite.py --arms orthogonal  # ADR-035 / A6
 uv run python ../scripts/run_matched_fpr_sweep.py       # RQ2 operating curves
 uv run python ../scripts/run_sensitivity_suite.py       # M-27 provisional sweep
 ```
@@ -240,6 +241,14 @@ both are reported first-class rather than in a caveat (ADR-046):
 - **A9** — the XGBoost margin over the linear baseline **survives**: seed
   spread 0.0051 / 0.0115 °C against margins of 0.4007 / 0.2310 °C, i.e. 79×
   and 20×. The RQ1 accuracy claim is not a seed artefact.
+- **A6** — the ADR-035 orthogonal-mode rotation behaves exactly as registered
+  in-control (mode correlation 9.1×10⁻¹⁷ on training, −0.065 on validation) and
+  makes the coordination rule meaningful for the first time: 2-of-2 over the
+  modes reaches 10 FA/ty at multiplier 4.54 vs 12.62 for 1-of-2, where the raw
+  channels' two rules were nearly indistinguishable (10.76 vs 12.96). But the
+  orthogonality **collapses on the monitoring stream** (mode correlation 0.835,
+  LIM-037), and the modes' detection value is untested by declaration
+  (ADR-035 condition c — one contested labelled event).
 
 Together they narrow the defensible contribution claim: XGBoost is genuinely
 more accurate than the linear reference, that advantage does not come from the
@@ -307,3 +316,8 @@ starts at the README:
 - **LIM-036**: EVENT-001 (code 1860, "Oil filter gear choked") belongs to the one
   failure mode Chapter 2's own Table 2.4 records as having "direct signals not
   thermal". The project models only thermal channels.
+- **LIM-037**: the ADR-035 orthogonal-mode arm (A6) ran on 2026-08-19. The
+  manufactured independence holds in-control and the coordination rule finally
+  separates from its 1-of-2 counterpart — but the orthogonality collapses on
+  the monitoring stream (mode correlation 0.835), so independent-evidence
+  coordination is a healthy-regime property on this dataset.

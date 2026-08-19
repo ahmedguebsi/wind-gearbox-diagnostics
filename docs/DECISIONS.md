@@ -1637,7 +1637,8 @@ Affected modules:  M-20/M-21 (ControlLimitSpec, ControlLimitFormulation,
 
 ## ADR-035 — Two-channel residual monitored in orthogonal modes
 
-Status:            PROPOSED (2026-08-18) — awaiting author ruling
+Status:            CLOSED (2026-08-19) — decision (b) executed as arm A6 on
+                   author instruction; outcome recorded below and in LIM-037
 Question:          RQ2 asks whether monitoring both thermal residual streams in
                    coordination detects degradation that either alone would
                    miss. That can only be true if the two streams carry
@@ -1719,6 +1720,22 @@ Scope note:        beyond the original PROJECT.md scope. §24 requires
 Affected modules:  NEW app/residuals/modes.py, M-19 (normalization ordering),
                    M-30 (runner wiring, metrics.residual_diagnostics), ADR-016,
                    ADR-027, LIM-020, RQ2 and RQ3 chapters.
+Outcome (2026-08-19, arm A6, base EXP-20260818-001):
+                   the expected-behaviour record HELD where the statistics
+                   come from: corr(common, differential) 9.1e-17 on training
+                   (machine zero), -0.065 on healthy validation; sd
+                   1.390/0.261 (the sqrt(1±r) identities exactly); variance
+                   share 96.6/3.4; lag-1 phi 0.78/0.53. Coordination became
+                   a real rule for the first time: 2-of-2 over the modes
+                   reaches the 10 FA/ty rung at multiplier 4.54 against
+                   12.62 for 1-of-2, where the raw channels gave 10.76
+                   against 12.96. On the MONITORING stream the orthogonality
+                   collapses (mode r = 0.835; both modes lag-1 ~0.96) —
+                   registered as LIM-037: the manufactured independence is a
+                   healthy-regime property. Pooled in-control inflation
+                   67.7x for the modes vs 60.1x raw on the identical block.
+                   Detection value remains UNTESTED (binding condition c,
+                   reported as declared).
 
 ## ADR-036 — Bias sign convention unified on the residual
 
