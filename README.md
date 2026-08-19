@@ -99,10 +99,34 @@ Everything lands in `artifacts/EXP-YYYYMMDD-NNN/`. Start with these four:
 | `metadata.json` | Seeds, the multiple-comparison register, the git/library version stamp, cleaning operations, split |
 | `evaluation/regime_split.json` | Every error and detection figure split by operating regime (ADR-047) — **read this before quoting any false-alarm number** |
 
-Also written: `model/`, `predictions/`, `residuals/` (parquet), `plots/` (12
-figures), `run.log`, and the remaining `evaluation/` reports — cleaning audit,
+Also written: `model/`, `predictions/`, `residuals/` (parquet), `plots/`,
+`run.log`, and the remaining `evaluation/` reports — cleaning audit,
 healthy-state report, split, normalizer stats, in-control report, condition
 diagnostics, and the EVENT-001 operator rendering.
+
+**How to interpret the numbers** (the mistakes this table prevents):
+
+- The citable RQ1 accuracy figures are ONLY the `monitoring_healthy` period in
+  `metrics.json` — the ADR-022 headline slice. `validation` is
+  selection-biased after tuning (ADR-021) and `test` conflates model error
+  with anomalous operation and the LIM-013 ambient extrapolation; neither is
+  an RQ1 measure, and `first_run_summary.json → rq1_period_labels` says so
+  next to the numbers.
+- Read `evaluation/regime_split.json` **before quoting any error or
+  false-alarm number**: 17.9% of the monitoring stream sits below the training
+  power floor and carries half the residual variance (LIM-034), so pooled
+  figures mix two regimes.
+- Uncertainty lives in `first_run_summary.json → rq1_metrics_with_cis`
+  (blocked-bootstrap 95% CIs with per-cell reliability flags) and the
+  Diebold–Mariano block; a point estimate without its interval is not a
+  finding.
+- Detection claims come from `evaluation/matched_fpr_sweep.json` (the ADR-016
+  pre-registered criterion and verdicts) and
+  `evaluation/robustness_suite.json` (the registered arms) — never from raw
+  alarm counts at a single threshold.
+- The research-question verdicts these numbers support are summarised in
+  [Research-question status](#research-question-status-read-before-citing)
+  below.
 
 ### 4. Analyses over a completed run
 
@@ -121,15 +145,41 @@ alignment. `run_matched_fpr_sweep.py` rebuilds the RQ1 slice membership from the
 pipeline's own code and aborts on any row-count disagreement, so it needs the
 dataset present.
 
-Further drivers: `make_comparison_plots.py` (three thesis figures from stored
-artifacts: RQ1 model RMSE with bootstrap CIs, the RQ2 raw-vs-modes false-alarm
-operating curves from arm A6, and the ADR-035 residual-channel geometry per
-partition — the figure that shows LIM-034/LIM-037),
-`run_eda.py` (read-only exploratory census),
+Further drivers: `run_eda.py` (read-only exploratory census),
 `run_nacelle_ablation.py` (ADR-027 predictor ablation),
 `diagnose_residual_dependence.py` (the ADR-034 serial-correlation diagnosis),
 `run_event001_context_series.py` and `run_event001_selected_points.py`
 (EVENT-001 case-study series).
+
+### 5. Generate the figures
+
+Both plot drivers read **stored artifacts only** — figures regenerate in
+seconds and cannot disagree with the metrics beside them:
+
+```bash
+cd backend
+uv run python ../scripts/make_diagnostic_plots.py  --experiment EXP-YYYYMMDD-NNN
+uv run python ../scripts/make_comparison_plots.py  --experiment EXP-YYYYMMDD-NNN
+```
+
+Everything lands in `artifacts/EXP-YYYYMMDD-NNN/plots/` with a manifest
+recording inputs, subsampling seed and counts:
+
+| Figure(s) | What it shows |
+|-----------|---------------|
+| `{bearing,oil}_actual_vs_predicted.png` | §20 fit quality on the headline slice |
+| `{bearing,oil}_residual_distribution.png` | §20 residual histogram + bias |
+| `{bearing,oil}_residual_over_time.png` | daily residual dispersion — the LIM-029 ageing drift |
+| `{bearing,oil}_residual_vs_{active_power,wind_speed,ambient_temperature}.png` | §20 heteroscedasticity + the LIM-013 ambient-extrapolation diagnostic |
+| `model_rmse_comparison.png` | RQ1 model comparison with blocked-bootstrap 95% CI whiskers (headline slice) |
+| `rq2_operating_curves.png` | false-alarm operating curves, raw channels vs ADR-035 modes (needs the A6 arm) |
+| `residual_channel_scatter.png` | the ADR-035 "thin cigar" per partition — makes LIM-034/LIM-037 visible |
+
+`comparison_manifest.json` also records what is deliberately NOT rendered
+(class-balance plots, confusion matrices, detection ROC/AUC, training curves)
+and the register entries that say why. The runner separately persists the
+condition-sliced error tables to `evaluation/condition_diagnostics.json`
+(ADR-045).
 
 ## Phase 0.5 dataset census (read-only, facts only)
 
@@ -203,19 +253,6 @@ scripts/                  # experiment drivers and census utilities
 Dependency direction is contractually enforced: `import-linter` declares the
 layer stack in `backend/pyproject.toml` and CI fails on any upward import.
 
-## Model diagnostics and figures (PROJECT.md §20, §31)
-
-```bash
-uv run python ../scripts/make_diagnostic_plots.py --experiment EXP-YYYYMMDD-NNN
-```
-
-Renders the §20 figures — actual vs predicted, residual distribution, residual
-dispersion over time, and residual vs active power / wind speed / ambient
-temperature — from **stored artifacts only**, so they regenerate in seconds
-without re-running the pipeline and cannot disagree with the metrics beside
-them. The runner separately persists the condition-sliced error tables to
-`evaluation/condition_diagnostics.json` (ADR-045).
-
 ## Registered comparison arms
 
 ```bash
@@ -258,6 +295,61 @@ Together they narrow the defensible contribution claim: XGBoost is genuinely
 more accurate than the linear reference, that advantage does not come from the
 multi-target architecture, and it does not translate into better detection than
 a no-model fleet baseline.
+
+## Research-question status (read before citing)
+
+The one-paragraph verdicts, with the register entries that carry the evidence.
+The locked RQ forms are in
+[`docs/THESIS_REQUIREMENTS.md`](docs/THESIS_REQUIREMENTS.md) §3.
+
+**RQ1 (NBM accuracy) — answerable, and answered, with stated boundaries.**
+XGBoost beats both linear baselines on the ADR-022 headline slice with
+non-overlapping bootstrap CIs (bearing 2.165 vs 2.556–2.563 °C RMSE; oil 2.690
+vs 2.917–2.929), the margin is 20–79× the seed spread (A9), and the ordering
+holds within the fitted operating regime (ADR-047). The boundaries: the
+accuracy does not come from the multi-target architecture (LIM-032, A8), and
+it does not purchase better detection than a no-model fleet baseline (LIM-031,
+B3).
+
+**RQ2 (coordinated vs single-signal evidence at matched false-alarm points) —
+NOT answerable as posed on this dataset.** Two independent blockers, either
+sufficient:
+
+1. *The coordination premise fails.* The two residual channels are correlated
+   at r = 0.932–0.952 — one heat path, two thermometers — so 1-of-2 and 2-of-2
+   rules fire on nearly the same rows and the sweep measures the channels, not
+   coordination (ADR-035). The pre-registered false-alarm-side verdict exists
+   and is **negative** (6 of 22 matched pairs met, hardening at the ADR-031
+   persistence boundaries; ADR-048), but it is a verdict about the channels.
+   The registered repair — the orthogonal-mode rotation, arm A6 — manufactures
+   the required independence in-control, yet it **collapses on the monitoring
+   stream** (mode correlation 0.835; LIM-037), i.e. exactly where detection
+   happens.
+2. *The detection half has no measurable axis.* Exactly one labelled gearbox
+   event exists; it is a filter-restriction Warning whose mechanism the
+   project's own literature review classifies as non-thermal (LIM-036), its
+   matched excursion points the wrong way (LIM-026), and it sits below the
+   Phase 0.5 event threshold, so detection performance is descriptive-only by
+   pre-commitment (ADR-014). No feature set or detector change alters this —
+   it is a property of the dataset's ground truth.
+
+What the thesis CAN claim for RQ2: the matched-FPR false-alarm comparison
+(negative, pre-registered), and the diagnosis of *why* the question is
+unanswerable here — which the A6 arm turned into a measured, citable result.
+
+**RQ3 (FMEA-informed interpretation) — not answerable affirmatively with this
+rule base on this dataset.** At r ≈ 0.95 three of the four instantiable rules
+fire together on essentially every positive excursion and the fourth describes
+a near-empty region, so the layer returns the same undifferentiated candidate
+set whenever it fires (LIM-030); the bearing target is a main-shaft channel,
+so two rules describe a node the dataset does not instrument (LIM-001); the
+single event's mechanism is one thermal channels cannot resolve, and the
+interpreter correctly returned "no candidate mechanism" on it (LIM-036); and
+no maintenance free text exists to verify any mechanism claim (LIM-002 — the
+Chapter 1 scope boundary already limits RQ3 to physical plausibility for this
+reason). The honest exits on record: reframe RQ3 as an architecture/mechanism
+demonstration with the discrimination gap stated, or rest discrimination on
+the differential mode — which LIM-037 now bounds to the healthy regime.
 
 ## Status
 
