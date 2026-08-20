@@ -2408,6 +2408,12 @@ Synthetic injections:
                    NEVER labelled "diagnostic validation"; no "accepted
                    standard method" claim unless a source in the project's
                    literature base explicitly supports it (review §17).
+                   Scope note (2026-08-21): DEFERRED to future work by
+                   author instruction (pre-submission time-boxing). The
+                   permission and its constraints stand unchanged; a draft
+                   driver exists untracked and NO injection result exists
+                   or is cited. Recorded so the scoped item is closed by
+                   decision, not by silence.
 Standing limitation:
                    n(maintenance-confirmed faults) = 0; real-world diagnostic
                    correctness remains unvalidated regardless of the above

@@ -1298,3 +1298,42 @@ Mitigation status:  OPEN. Prerequisites for any utility claim: an
 Source:             `artifacts/EXP-20260818-001/evaluation/ruleset_v2_evaluation.json`,
                     `ruleset_v2_episodes.csv`, 2026-08-20; ADR-050 outcome
                     block.
+
+## LIM-039 — The EVENT-001 match does not satisfy the declared persistence criterion
+
+Date discovered:    2026-08-21
+Description:        FINDING, from re-reading stored artifacts against the
+                    declared methodology (surfaced by an external review).
+                    The declared qualification rule is >= 3 consecutive
+                    samples (ADR-017(b); `detection.persistence_min_samples
+                    = 3`): "isolated single-sample crossings never count."
+                    The matched EVENT-001 detection (EXP-20260818-001,
+                    `evaluation/event001_diagnostic.txt`) is a SINGLE-SAMPLE
+                    excursion: persistence 1, max |EWMA| 1.24 sigma,
+                    direction LOW, 2019-02-10 20:50 UTC. Under the project's
+                    own rule this is NOT a qualifying detection, and the
+                    recorded lead_time_minutes = 19,910 must not be cited as
+                    a qualifying detection lead anywhere. The 14-day window
+                    census (72 low vs 10 high of 82 exceedance samples)
+                    confirms the window is cold-dominated (LIM-026), and
+                    first_run_summary.json already records
+                    inferential_allowed: false (ADR-014).
+Why this matters:   quoting the 13.8-day "lead time" as a detection result
+                    would contradict the declared methodology in a way a
+                    jury can verify from the artifacts in one minute.
+                    Corrected, the EVENT-001 story is fully CONSISTENT
+                    across every layer: no qualifying persistent detection
+                    (this entry); wrong-direction excursion (LIM-026);
+                    non-thermal mechanism (LIM-036); v1 interpreter
+                    abstained; v2 forced zero single-candidate attributions.
+Affected RQ(s):     RQ2 (event-level reporting; the O4 lead-time indicator),
+                    RQ3 (case-study framing)
+Mitigation status:  MITIGATED (by correction). Binding language: "EVENT-001
+                    produced no qualifying persistent detection under the
+                    declared criterion; the matched single-sample excursion
+                    and its lead time are reported as descriptive window
+                    characterization only." The O4 lead-time indicator is
+                    reported as not achieved at the declared persistence.
+Source:             `artifacts/EXP-20260818-001/evaluation/event001_diagnostic.txt`;
+                    `first_run_summary.json -> event_001`; ADR-017;
+                    `app/core/config.py` persistence_min_samples.
