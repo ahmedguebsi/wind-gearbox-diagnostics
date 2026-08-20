@@ -1253,3 +1253,48 @@ Source:             `artifacts/EXP-20260818-001/evaluation/robustness_suite.json
                     arm `orthogonal`, 2026-08-19. ADR-035 binding conditions
                     (a)-(d) honoured; detection value UNTESTED by declaration
                     (condition c).
+
+## LIM-038 — Ruleset v2 interpretations inherit the detector's inflation and a machine-specific bearing signature
+
+Date discovered:    2026-08-20
+Description:        FINDING, from the ADR-050 frozen evaluation
+                    (`evaluation/ruleset_v2_evaluation.json`, base
+                    EXP-20260818-001). Two observations bound what the v2
+                    episode outputs can claim:
+                    (1) VOLUME. 33.8% of eligible monitoring samples fall
+                    inside interpretation episodes — 17,656 episodes,
+                    roughly 3.3 per turbine-day — because the episode
+                    source is the uncalibrated 3-sigma EWMA chain whose
+                    in-control false-alarm inflation is ~60x (LIM-024,
+                    ADR-026). The interpretation layer faithfully
+                    interprets whatever the detector emits; at this alarm
+                    volume its outputs are a representation-vocabulary
+                    demonstration, not operator guidance.
+                    (2) CONCENTRATION. Bearing-led Type A attributions
+                    concentrate on Kelmarsh 4 — 1,972 of 3,084 episodes
+                    (64%) and 31,152 of 42,879 episode-samples (72.6%) —
+                    while Kelmarsh 1 produces none at all. A persistent
+                    machine-specific positive differential is exactly the
+                    sensor-bias / target-specific-model-error pattern the
+                    ADR-050 binding caution names; without the P-5
+                    per-turbine centre/scale measurement
+                    (docs/METHODOLOGY_REVIEW.md) a bearing-led attribution
+                    cannot be separated from a bearing-sensor offset on
+                    that machine.
+Why this matters:   it fixes the altitude of the RQ3 claim. The v2
+                    evaluation shows the mode representation
+                    DIFFERENTIATES (all four output kinds populated,
+                    ordering evidence mechanical, zero forced attributions
+                    on EVENT-001) — but any step from "the vocabulary
+                    works" to "the outputs are useful monitoring
+                    diagnoses" runs through these two facts first.
+Affected RQ(s):     RQ3
+Mitigation status:  OPEN. Prerequisites for any utility claim: an
+                    empirically calibrated operating point for the mode
+                    chain (the ADR-026 question, unresolved for the raw
+                    channels too) and the P-5 per-turbine residual
+                    centre/scale measurement. The bounded-positive
+                    representation-level claim stands WITH these stated.
+Source:             `artifacts/EXP-20260818-001/evaluation/ruleset_v2_evaluation.json`,
+                    `ruleset_v2_episodes.csv`, 2026-08-20; ADR-050 outcome
+                    block.

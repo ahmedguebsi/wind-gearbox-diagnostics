@@ -2415,3 +2415,40 @@ Standing limitation:
                    POSITIVE at most, per the review's §21 formulation.
 Affected:          NEW app/fmea ruleset v2 + modes wiring, M-22, ADR-035,
                    ADR-049, LIM-030, LIM-037, RQ3 chapters.
+Outcome (2026-08-20, `evaluation/ruleset_v2_evaluation.json` +
+`evaluation/ruleset_v2_episodes.csv`, base EXP-20260818-001):
+                   executed under the frozen spec, after the implementation
+                   commit (0982ecc) which itself followed the spec commit
+                   (c2c79d1) — the chronology is provable from history.
+                   17,656 episodes on the eligible monitoring stream:
+                     Type A  3,084 (all FMEA-002 bearing-led)
+                     Type B  8,665 (4,805 FMEA-003-led; 3,182 FMEA-004-led;
+                                    678 FMEA-001-led)
+                     Type C  5,907 (R5, incl. every cold-side episode)
+                     R_OOD   132,906 withheld samples, 119,842 of them
+                             exceedances the gate declined to interpret.
+                   The representation DIFFERENTIATES: v1 returned one
+                   undifferentiated candidate set on essentially every
+                   positive excursion (LIM-030); v2 populates all four
+                   output kinds with per-episode ordering evidence.
+                   EVENT-001 window: 262 episodes — ZERO Type A; 161
+                   ambiguous (123 FMEA-003-led, 37 FMEA-004-led, 1
+                   FMEA-001-led), 101 R5. No single-candidate attribution
+                   was forced onto the event. That oil-led/lubrication-
+                   family candidates dominate a lubrication-system event
+                   window (in-window FMEA-003 share 47% vs 27% base rate)
+                   is noted as descriptively coherent and NOT claimed as
+                   confirmation (LIM-036).
+                   Two adverse observations registered as LIM-038: episode
+                   volume inherits the detector's ~60x in-control inflation
+                   (33.8% of eligible samples lie inside episodes, ~3.3
+                   episodes per turbine-day), and Type A attributions
+                   concentrate on Kelmarsh 4 (64% of episodes, 72.6% of
+                   episode-samples; Kelmarsh 1 has none) — the
+                   machine-specific pattern the binding caution names.
+                   Reading: the bounded-positive RQ3 claim is SUPPORTED at
+                   the representation level (candidate mechanisms, retained
+                   ambiguity, dual abstention) and NOT SUPPORTED as
+                   operational diagnosis; detection value remains untested
+                   (ADR-035 c) and diagnostic correctness unvalidated
+                   (n maintenance-confirmed = 0).

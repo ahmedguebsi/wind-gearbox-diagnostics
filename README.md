@@ -364,10 +364,21 @@ post-hoc refinement with the v1 adverse result reported first. The measured
 basis is `evaluation/mode_regime_split.json`: the LIM-037 collapse is confined
 out-of-support (in-regime mode correlation −0.048 vs 0.860 out), the
 differential mode is stable across turbines and carries real sustained
-excursions. Target verdict if the frozen evaluation succeeds: a **bounded
-positive** — candidate mechanisms with retained ambiguity and abstention,
-never validated diagnosis (maintenance-confirmed correctness stays
-unavailable).
+excursions.
+
+**The frozen evaluation ran on 2026-08-20** (`ruleset_v2_evaluation.json`,
+implementation committed before execution). Outcome: the representation
+**differentiates** — 17,656 episodes split into 3,084 bearing-led positives,
+8,665 ambiguous sets with ranked candidates, 5,907 explicit no-candidate
+abstentions, plus 119,842 withheld out-of-support exceedances; on the
+EVENT-001 window the layer forced **zero** single-candidate attributions
+(161 ambiguous, 101 abstentions). The RQ3 verdict this supports is a
+**bounded positive at the representation level**: candidate mechanisms,
+retained ambiguity, and dual abstention — never validated diagnosis. Two
+bounds are registered as LIM-038: episode volume inherits the detector's
+~60× in-control inflation (33.8% of eligible samples sit inside episodes),
+and bearing-led attributions concentrate on Kelmarsh 4 (64%), the
+sensor-bias pattern the ADR-050 caution anticipated.
 
 ## Status
 
