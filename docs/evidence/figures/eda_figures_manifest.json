@@ -1,0 +1,40 @@
+{
+  "inputs": {
+    "eda": {
+      "path": "docs\\evidence\\KELMARSH_EDA_2016_2021.json",
+      "generated_at_utc": "2026-08-17T11:46:50.002214+00:00",
+      "mapping_hash": "d99fae81f0dd5e649377c0423e6c7083205d048774b91682ff6602f29668f9e8"
+    },
+    "status_vocabulary": {
+      "path": "docs\\evidence\\KELMARSH_STATUS_VOCABULARY_2016_2021.json",
+      "generated_at_utc": "2026-08-11T19:17:25.262061+00:00"
+    },
+    "experiment": "EXP-20260818-001",
+    "experiment_files": [
+      "split.json",
+      "cleaning_audit.json",
+      "healthy_state_report.json"
+    ]
+  },
+  "source_banner": "READ-ONLY EDA. Facts only: no cleaning applied to source, no judgment, no anomaly designation, no inferred labels. Cleaning and healthy-state figures are PREVIEWS of what the pipeline would remove, not applied transformations.",
+  "constants": {
+    "event_001_span_utc_adr_024": [
+      "2019-02-24 16:46:28+00:00",
+      "2019-05-30 07:34:04+00:00"
+    ],
+    "thermal_start_utc_adr_009": "2016-05-03 09:40:00+00:00"
+  },
+  "formats": [
+    "png"
+  ],
+  "figures": [
+    "autocorrelation.png",
+    "channel_missingness.png",
+    "correlation_structure.png",
+    "data_attrition.png",
+    "dataset_timeline.png",
+    "fleet_coherence.png",
+    "operating_regime.png",
+    "status_ground_truth.png"
+  ]
+}

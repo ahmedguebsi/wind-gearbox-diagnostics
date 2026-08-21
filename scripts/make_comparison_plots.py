@@ -18,7 +18,15 @@ WHY THIS EXISTS. Three quantities central to Chapters 4-5 existed only as JSON:
 - **residual_channel_scatter** — the joint distribution of the two normalized
   residual channels per partition: the "thin cigar on the diagonal" ADR-035
   measured (r = 0.93-0.95), and the monitoring-partition inflation behind
-  LIM-034/LIM-037, visible as the test panel's blown-up cloud.
+  LIM-034/LIM-037, visible as the monitoring panel's blown-up cloud.
+
+Two more render when their artifacts exist:
+
+- **rmse_by_regime** — ADR-047's reporting rule as a figure: RMSE per model
+  split at the fitted-support boundary (`regime_split.json`).
+- **feature_importance** — native XGBoost gain/cover of the stored thesis
+  booster, the only importance view PROJECT.md §30 permits (NO SHAP,
+  LOCKED-07).
 
 Reads STORED ARTIFACTS ONLY and writes into the experiment's own ``plots/``
 directory (its manifest goes to ``comparison_manifest.json`` so the §20
@@ -68,6 +76,17 @@ PIPELINE_COLORS = {
     "single_b": "#6B7D82",
 }
 
+#: Display names for the stored partition files. The parquet partition is
+#: called "test" on disk, but the project's reporting vocabulary (ADR-022
+#: three-period labels, README, LIMITATIONS) calls that stream the MONITORING
+#: period; a printed figure must use the reporting name, with the file name
+#: kept in parentheses so the artifact remains findable.
+PARTITION_DISPLAY = {
+    "training": "training",
+    "validation": "validation",
+    "test": "monitoring (stored as test)",
+}
+
 
 def _style(ax: plt.Axes, title: str, xlabel: str, ylabel: str) -> None:
     ax.set_title(title, fontsize=10)
@@ -75,6 +94,16 @@ def _style(ax: plt.Axes, title: str, xlabel: str, ylabel: str) -> None:
     ax.set_ylabel(ylabel, fontsize=9)
     ax.grid(alpha=0.25, linewidth=0.5)
     ax.tick_params(labelsize=8)
+
+
+#: Set to ("png", "svg") by --svg: §31 asks for PNG/SVG "where practical".
+#: SVG stays opt-in because vector scatters of 20k points are heavy files.
+SAVE_FORMATS: tuple[str, ...] = ("png",)
+
+
+def _save(fig: plt.Figure, out: Path) -> None:
+    for fmt in SAVE_FORMATS:
+        fig.savefig(out.with_suffix(f".{fmt}"), dpi=DPI)
 
 
 # --------------------------------------------------------------------------
@@ -121,7 +150,7 @@ def plot_model_comparison(summary: dict[str, Any], out: Path) -> None:
         _style(ax, f"RMSE with 95% CI — {short}", "", "RMSE (°C)")
     fig.suptitle(f"Model comparison on the RQ1 headline slice — {period_label}", fontsize=9)
     fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.95))
-    fig.savefig(out, dpi=DPI)
+    _save(fig, out)
     plt.close(fig)
 
 
@@ -177,7 +206,7 @@ def plot_operating_curves(suite: dict[str, Any], out: Path) -> None:
         fontsize=8,
     )
     fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.88))
-    fig.savefig(out, dpi=DPI)
+    _save(fig, out)
     plt.close(fig)
 
 
@@ -234,29 +263,156 @@ def plot_channel_scatter(
         )
         _style(
             ax,
-            f"{partition} (n = {len(wide):,})",
+            f"{PARTITION_DISPLAY[partition]} (n = {len(wide):,})",
             "bearing residual (normalized)",
             "oil residual (normalized)" if partition == "training" else "",
         )
         stats[partition] = {"channel_pearson": r, "n_aligned": len(wide)}
     fig.suptitle(
         'Joint residual-channel geometry — the ADR-035 "thin cigar on the diagonal".\n'
-        "The test panel's inflation is LIM-034; the mode-correlation collapse there is LIM-037.",
+        "The monitoring panel's inflation is LIM-034; the mode-correlation collapse there "
+        "is LIM-037.",
         fontsize=9,
     )
     # Equal-aspect panels defeat tight_layout's bottom-margin estimate, so the
     # margins are explicit: without this the x-axis labels render off-canvas.
     fig.subplots_adjust(left=0.07, right=0.98, bottom=0.14, top=0.80, wspace=0.15)
-    fig.savefig(out, dpi=DPI)
+    _save(fig, out)
     plt.close(fig)
     return stats
+
+
+# --------------------------------------------------------------------------
+# Figure 4 — RMSE split by operating regime (ADR-047)
+# --------------------------------------------------------------------------
+
+
+def plot_regime_split(split: dict[str, Any], out: Path) -> None:
+    """ADR-047's reporting rule rendered as a figure.
+
+    "NO figure aggregated over the whole stream is a statement about the
+    model" — this one shows why: per model and target, the RMSE inside the
+    fitted operating regime sits an order of magnitude below the RMSE outside
+    it, so the log axis is not presentation taste but the finding itself.
+    Reads the stored ``regime_split.json`` (run_regime_split.py), never
+    recomputes.
+    """
+    accuracy = split["accuracy_by_regime"]
+    floor = split["regime_boundary"]["floor_kw"]
+    models = [m for m in ("baseline", "elastic_net", "thesis") if m in accuracy]
+    targets = sorted(next(iter(accuracy.values())).keys())
+
+    fig, axes = plt.subplots(1, len(targets), figsize=(4.2 * len(targets), 3.8), sharey=True)
+    for ax, target in zip(np.atleast_1d(axes), targets, strict=True):
+        for i, model in enumerate(models):
+            cells = accuracy[model][target]
+            for regime, marker, fill in (("in_regime", "o", True), ("out_of_regime", "^", False)):
+                cell = cells[regime]
+                ax.plot(
+                    i,
+                    cell["rmse"],
+                    marker=marker,
+                    markersize=6,
+                    linestyle="none",
+                    color=MODEL_COLORS[model],
+                    markerfacecolor=MODEL_COLORS[model] if fill else "none",
+                )
+                ax.annotate(
+                    f"{cell['rmse']:.2f}",
+                    (i, cell["rmse"]),
+                    textcoords="offset points",
+                    xytext=(8, -3),
+                    fontsize=7,
+                )
+        ax.set_yscale("log")
+        ax.set_xticks(range(len(models)))
+        ax.set_xticklabels([MODEL_LABELS[m] for m in models], fontsize=8, rotation=12)
+        ax.set_xlim(-0.5, len(models) - 0.5)
+        short = target.replace("gearbox_", "").replace("_temperature", "")
+        _style(ax, f"RMSE by operating regime — {short}", "", "RMSE (°C, log)")
+    # Legend proxies: filled = in-regime, open = out-of-regime (colors vary by model).
+    handles = [
+        plt.Line2D([], [], marker="o", ls="none", color="#3A3A3A", label="in regime"),
+        plt.Line2D(
+            [], [], marker="^", ls="none", color="#3A3A3A", markerfacecolor="none",
+            label="out of regime",
+        ),
+    ]
+    np.atleast_1d(axes)[-1].legend(handles=handles, fontsize=8, frameon=False, loc="center right")
+    thesis = accuracy["thesis"][targets[0]]
+    fig.suptitle(
+        "Monitoring-period error split at the fitted-support boundary "
+        f"({floor:g} kW — ADR-047; the boundary IS the training power floor).\n"
+        f"In-regime rows: {thesis['in_regime']['share']:.1%} of the stream carrying "
+        f"{thesis['in_regime']['variance_share']:.1%} of residual variance; out-of-regime: "
+        f"{thesis['out_of_regime']['share']:.1%} carrying "
+        f"{thesis['out_of_regime']['variance_share']:.1%} (LIM-034).",
+        fontsize=8,
+    )
+    fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.90))
+    _save(fig, out)
+    plt.close(fig)
+
+
+# --------------------------------------------------------------------------
+# Figure 5 — native XGBoost feature importance (PROJECT.md §30; no SHAP)
+# --------------------------------------------------------------------------
+
+
+def plot_feature_importance(model_dir: Path, out: Path) -> dict[str, Any] | None:
+    """Native gain/cover importance of the stored thesis booster.
+
+    PROJECT.md §30 permits exactly this view and nothing further: "native
+    XGBoost gain/cover importance only; NO SHAP views" (LOCKED-07). The
+    stored model file is itself an experiment artifact, so this stays within
+    the ADR-045 stored-artifacts-only rule. The caption states the claim
+    altitude: importance describes the fitted prediction function over the
+    healthy training population — it is not diagnostic evidence and not a
+    residual attribution.
+    """
+    try:
+        import xgboost
+    except ImportError:
+        return None
+    path = model_dir / "thesis" / "__multi__.ubj"
+    if not path.is_file():
+        return None
+    booster = xgboost.Booster()
+    booster.load_model(str(path))
+    gain = booster.get_score(importance_type="gain")
+    cover = booster.get_score(importance_type="cover")
+    features = sorted(gain, key=gain.get)
+
+    fig, (ax_gain, ax_cover) = plt.subplots(1, 2, figsize=(9.0, 3.8), sharey=True)
+    y = np.arange(len(features))
+    ax_gain.barh(y, [gain[f] for f in features], color="#0B6672", alpha=0.85)
+    ax_cover.barh(y, [cover.get(f, 0.0) for f in features], color="#8A5606", alpha=0.85)
+    ax_gain.set_yticks(y)
+    ax_gain.set_yticklabels([f.replace("_", " ") for f in features], fontsize=8)
+    _style(ax_gain, "mean split gain", "gain", "")
+    _style(ax_cover, "mean split cover", "cover", "")
+    fig.suptitle(
+        "Native XGBoost importance of the multi-target thesis NBM (gain/cover only — "
+        "PROJECT.md §30, LOCKED-07).\nDescribes the fitted prediction function over the healthy "
+        "training population; aggregated across both targets;\nnot diagnostic evidence and not "
+        "a residual attribution.",
+        fontsize=8,
+    )
+    fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.86))
+    _save(fig, out)
+    plt.close(fig)
+    return {"gain": gain, "cover": cover, "model_file": path.name}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--artifacts", type=Path, default=REPO_ROOT / "artifacts")
     parser.add_argument("--experiment", default=None)
+    parser.add_argument("--svg", action="store_true", help="Also write SVG (PROJECT.md §31).")
     args = parser.parse_args()
+    if args.svg:
+        global SAVE_FORMATS
+        SAVE_FORMATS = ("png", "svg")
 
     experiment = args.experiment
     if experiment is None:
@@ -297,13 +453,32 @@ def main() -> int:
     )
     written.append("residual_channel_scatter.png")
 
+    regime_path = directory / "evaluation" / "regime_split.json"
+    regime: dict[str, Any] | None = None
+    if regime_path.is_file():
+        regime = json.loads(regime_path.read_text(encoding="utf-8"))
+        plot_regime_split(regime, plots / "rmse_by_regime.png")
+        written.append("rmse_by_regime.png")
+    else:
+        print(f"SKIPPED rmse_by_regime: no {regime_path} (run run_regime_split.py)")
+
+    importance = plot_feature_importance(directory / "model", plots / "feature_importance.png")
+    if importance is not None:
+        written.append("feature_importance.png")
+    else:
+        print(f"SKIPPED feature_importance: no thesis booster under {directory / 'model'}")
+
     manifest = {
         "experiment_id": experiment,
         "inputs": {
             "first_run_summary": summary_path.name,
             "robustness_suite": suite_path.name if suite is not None else None,
+            "regime_split": regime_path.name if regime is not None else None,
+            "thesis_model": importance["model_file"] if importance is not None else None,
             "residual_parquets": ["training", "validation", "test"],
         },
+        "partition_display": PARTITION_DISPLAY,
+        "formats": list(SAVE_FORMATS),
         "headline_period": HEADLINE_PERIOD,
         "fpr_rung": FPR_RUNG,
         "scatter_subsample": {"max_points": SCATTER_MAX_POINTS, "seed": SCATTER_SEED},

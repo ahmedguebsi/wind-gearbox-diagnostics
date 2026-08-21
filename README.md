@@ -156,27 +156,44 @@ aborts on disagreement), `run_eda.py` (read-only exploratory census),
 
 ### 5. Generate the figures
 
-Both plot drivers read **stored artifacts only** — figures regenerate in
-seconds and cannot disagree with the metrics beside them:
+All four plot drivers read **stored artifacts only** — figures regenerate in
+seconds and cannot disagree with the metrics beside them. Each accepts
+`--svg` to additionally emit SVG (PROJECT.md §31):
 
 ```bash
 cd backend
-uv run python ../scripts/make_diagnostic_plots.py  --experiment EXP-YYYYMMDD-NNN
-uv run python ../scripts/make_comparison_plots.py  --experiment EXP-YYYYMMDD-NNN
+uv run python ../scripts/make_diagnostic_plots.py     --experiment EXP-YYYYMMDD-NNN
+uv run python ../scripts/make_comparison_plots.py     --experiment EXP-YYYYMMDD-NNN
+uv run python ../scripts/make_interpretation_plots.py --experiment EXP-YYYYMMDD-NNN
+uv run python ../scripts/make_eda_plots.py            --experiment EXP-YYYYMMDD-NNN
 ```
 
-Everything lands in `artifacts/EXP-YYYYMMDD-NNN/plots/` with a manifest
-recording inputs, subsampling seed and counts:
+The first three land in `artifacts/EXP-YYYYMMDD-NNN/plots/` with per-driver
+manifests recording inputs, subsampling seed and counts; every figure states
+the population it draws in its own title:
 
 | Figure(s) | What it shows |
 |-----------|---------------|
-| `{bearing,oil}_actual_vs_predicted.png` | §20 fit quality on the headline slice |
+| `{bearing,oil}_actual_vs_predicted.png` | §20 fit quality — monitoring period, unfiltered (title says so) |
 | `{bearing,oil}_residual_distribution.png` | §20 residual histogram + bias |
 | `{bearing,oil}_residual_over_time.png` | daily residual dispersion — the LIM-029 ageing drift |
-| `{bearing,oil}_residual_vs_{active_power,wind_speed,ambient_temperature}.png` | §20 heteroscedasticity + the LIM-013 ambient-extrapolation diagnostic |
+| `{bearing,oil}_residual_vs_{active_power,wind_speed,ambient_temperature}.png` | §20 heteroscedasticity + the LIM-013 ambient-extrapolation diagnostic; the active-power figure draws the ADR-047 fitted-support boundary |
 | `model_rmse_comparison.png` | RQ1 model comparison with blocked-bootstrap 95% CI whiskers (headline slice) |
 | `rq2_operating_curves.png` | false-alarm operating curves, raw channels vs ADR-035 modes (needs the A6 arm) |
 | `residual_channel_scatter.png` | the ADR-035 "thin cigar" per partition — makes LIM-034/LIM-037 visible |
+| `rmse_by_regime.png` | ADR-047's rule as a figure: RMSE per model split at the fitted-support boundary (needs `regime_split.json`) |
+| `feature_importance.png` | native XGBoost gain/cover of the stored thesis booster — the only importance view §30 permits (NO SHAP, LOCKED-07) |
+| `rq3_episode_outcomes.png` | ruleset v2 episode mix + the LIM-038 Kelmarsh-4 concentration (exploratory, ADR-050 claim altitude in the caption) |
+| `rq3_event001_window.png` | EVENT-001 window outcome shares vs base rate — the ADR-050(e) abstention, LIM-036 attached |
+| `event001_context_*.png` | descriptive EVENT-001 series (`run_event001_context_series.py`; operating point read from the stored sweep artifacts, LIM-039-compliant) |
+
+`make_eda_plots.py` writes the dataset-level figures to
+`docs/evidence/figures/` (committed — they render the committed evidence
+JSONs plus the experiment's split/cleaning/healthy-state artifacts): coverage
+timeline with the ADR-023 split, channel missingness (LIM-005), operating
+regime, correlation structure, fleet coherence, target autocorrelation,
+applied attrition, and the status-vocabulary ground-truth-scarcity figure
+(ADR-013/ADR-014).
 
 `comparison_manifest.json` also records what is deliberately NOT rendered
 (class-balance plots, confusion matrices, detection ROC/AUC, training curves)
