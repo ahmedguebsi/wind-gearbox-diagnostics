@@ -1328,12 +1328,28 @@ Why this matters:   quoting the 13.8-day "lead time" as a detection result
                     abstained; v2 forced zero single-candidate attributions.
 Affected RQ(s):     RQ2 (event-level reporting; the O4 lead-time indicator),
                     RQ3 (case-study framing)
-Mitigation status:  MITIGATED (by correction). Binding language: "EVENT-001
-                    produced no qualifying persistent detection under the
-                    declared criterion; the matched single-sample excursion
-                    and its lead time are reported as descriptive window
-                    characterization only." The O4 lead-time indicator is
-                    reported as not achieved at the declared persistence.
+Refinement (2026-08-21, from the M-27 sweep):
+                    the disqualification applies to the NOMINAL operating
+                    point (3.0-sigma limits), where the 19,910-minute
+                    headline was anchored on the single-sample excursion. At
+                    the RE-MATCHED 10 FA/turbine-year coordinated operating
+                    point, the M-27 matcher — which enforces the declared
+                    persistence via persistent_starts() — finds a QUALIFYING
+                    persistent detection with lead 18,716 minutes (~13.0
+                    days), stable across persistence 2/3/6, window 7/14/30
+                    days, and every other swept parameter
+                    (`sensitivity_suite.json`). The sweep does not record
+                    that detection's direction; LIM-026's direction caveat
+                    and ADR-014's descriptive-only status apply unchanged.
+Mitigation status:  MITIGATED (by correction; refined 2026-08-21). Binding
+                    language: NEVER cite 19,910 minutes — it is anchored on
+                    a single-sample, non-qualifying excursion at the nominal
+                    point. The citable descriptive figure is the re-matched
+                    point's persistence-qualifying lead of 18,716 minutes,
+                    always reported with LIM-026 (direction) and ADR-014
+                    (descriptive-only, single event) attached. The O4
+                    lead-time indicator is reported at the matched operating
+                    point only.
 Source:             `artifacts/EXP-20260818-001/evaluation/event001_diagnostic.txt`;
                     `first_run_summary.json -> event_001`; ADR-017;
                     `app/core/config.py` persistence_min_samples.

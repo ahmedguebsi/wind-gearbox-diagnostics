@@ -22,7 +22,9 @@ Affected modules:  <M-xx IDs>
 
 ## ADR-001 — Source partition for normalization/threshold statistics
 
-Status:            OPEN
+Status:            CLOSED (2026-08-21) — evidence from the M-27 sensitivity
+                   sweep, the exact comparison this ADR named as its closure
+                   condition
 Question:          Are residual-normalization and threshold statistics fitted
                    on the healthy TRAINING block (v1.0 default) or the healthy
                    VALIDATION block (panel-reviewer recommendation, avoiding
@@ -31,8 +33,21 @@ Question:          Are residual-normalization and threshold statistics fitted
 Options:           training | validation
 Evidence to close: Comparison of in-control false-alarm behaviour under both
                    settings on real healthy Kelmarsh data; Chapter 3 argument.
-Decision:          —
-Justification:     —
+Decision:          TRAINING — the value every recorded run executed, ratified.
+Justification:     The sweep ran both branches on real healthy Kelmarsh data
+                   (`sensitivity_suite.json`, parameter
+                   residual.threshold_stats_source): identical conclusion
+                   labels on every component, identical headline RMSE
+                   (2.1647 / 2.6904), in-control rate 0.16214 (training) vs
+                   0.14287 (validation) — BOTH materially inflated, so the
+                   panel-review concern is real but immaterial at this
+                   dataset's inflation scale — matched multiplier 10.76 vs
+                   10.37, EVENT-001 lead 18,716 vs 18,706 min. No conclusion
+                   component moves. VALIDATION already serves ADR-021 tuning
+                   and the M-20 in-control characterisation; moving threshold
+                   statistics there would concentrate three roles on one
+                   block for no measured benefit. Chapter 3 reports the
+                   two-branch comparison alongside the ruling.
 Affected modules:  M-19b (normalizers), M-20 (EWMA limits), M-03 (config enum
                    `threshold_stats_source`, default `training` pending closure)
 
