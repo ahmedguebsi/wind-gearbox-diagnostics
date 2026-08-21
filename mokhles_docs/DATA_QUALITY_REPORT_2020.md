@@ -1,0 +1,320 @@
+# SCADA Data Quality Assessment (2020)
+
+## 1. Missing Data
+- **Wind speed (m/s)**: 0.86% missing
+- **Wind speed, Standard deviation (m/s)**: 1.35% missing
+- **Wind speed, Minimum (m/s)**: 1.35% missing
+- **Wind speed, Maximum (m/s)**: 1.35% missing
+- **Wind speed Sensor 1 (m/s)**: 1.16% missing
+- **Wind speed Sensor 1, Standard deviation (m/s)**: 1.64% missing
+- **Wind speed Sensor 1, Minimum (m/s)**: 2.51% missing
+- **Wind speed Sensor 1, Maximum (m/s)**: 1.64% missing
+- **Wind speed Sensor 2 (m/s)**: 0.86% missing
+- **Wind speed Sensor 2, Standard deviation (m/s)**: 1.35% missing
+- **Wind speed Sensor 2, Minimum (m/s)**: 1.35% missing
+- **Wind speed Sensor 2, Maximum (m/s)**: 1.35% missing
+- **Density adjusted wind speed (m/s)**: 1.35% missing
+- **Wind direction (°)**: 0.86% missing
+- **Nacelle position (°)**: 0.86% missing
+- **Wind direction, Standard deviation (°)**: 1.35% missing
+- **Wind direction, Minimum (°)**: 1.35% missing
+- **Wind direction, Maximum (°)**: 1.35% missing
+- **Nacelle position, Standard deviation (°)**: 1.35% missing
+- **Nacelle position, Minimum (°)**: 1.35% missing
+- **Nacelle position, Maximum (°)**: 1.35% missing
+- **Vane position 1+2 (°)**: 1.35% missing
+- **Vane position 1+2, Max (°)**: 8.3% missing
+- **Vane position 1+2, Min (°)**: 8.3% missing
+- **Vane position 1+2, StdDev (°)**: 8.3% missing
+- **Energy Export counter (kWh)**: 10.71% missing
+- **Energy Import (kWh)**: 5.87% missing
+- **Energy Import counter (kWh)**: 95.09% missing
+- **Lost Production (Contractual) (kWh)**: 0.53% missing
+- **Lost Production (Time-based IEC B.2.2) (kWh)**: 0.53% missing
+- **Lost Production (Time-based IEC B.2.3) (kWh)**: 0.53% missing
+- **Lost Production (Time-based IEC B.2.4) (kWh)**: 0.81% missing
+- **Lost Production (Time-based IEC B.3.2) (kWh)**: 0.66% missing
+- **Lost Production (Production-based IEC B.2.2) (kWh)**: 0.53% missing
+- **Lost Production (Production-based IEC B.2.3) (kWh)**: 12.66% missing
+- **Lost Production (Production-based IEC B.3.2) (kWh)**: 0.66% missing
+- **Energy Theoretical (kWh)**: 0.08% missing
+- **Lost Production to Downtime (kWh)**: 0.54% missing
+- **Lost Production to Performance (kWh)**: 0.86% missing
+- **Lost Production Total (kWh)**: 0.08% missing
+- **Lost Production to Curtailment (Total) (kWh)**: 0.08% missing
+- **Lost Production to Curtailment (Grid) (kWh)**: 0.08% missing
+- **Lost Production to Curtailment (Noise) (kWh)**: 0.08% missing
+- **Lost Production to Curtailment (Shadow) (kWh)**: 0.08% missing
+- **Lost Production to Curtailment (Bats) (kWh)**: 0.08% missing
+- **Lost Production to Curtailment (Birds) (kWh)**: 0.08% missing
+- **Lost Production to Curtailment (Ice) (kWh)**: 0.08% missing
+- **Lost Production to Curtailment (Sector Management) (kWh)**: 0.08% missing
+- **Lost Production to Curtailment (Technical) (kWh)**: 0.08% missing
+- **Lost Production to Curtailment (Marketing) (kWh)**: 0.08% missing
+- **Lost Production to Curtailment (Boat Action) (kWh)**: 0.08% missing
+- **Compensated Lost Production (kWh)**: 0.08% missing
+- **Lost Production to Curtailment (Grid Constraint) (kWh)**: 0.08% missing
+- **Lost Production to Downtime and Curtailment Total (kWh)**: 0.08% missing
+- **Lost Production (Contractual Global) (kWh)**: 100.0% missing
+- **Lost Production (Contractual Custom) (kWh)**: 100.0% missing
+- **Power (kW)**: 0.87% missing
+- **Potential power default PC (kW)**: 0.86% missing
+- **Power, Standard deviation (kW)**: 1.35% missing
+- **Power, Minimum (kW)**: 1.35% missing
+- **Power, Maximum (kW)**: 1.35% missing
+- **Potential power learned PC (kW)**: 0.86% missing
+- **Potential power reference turbines (kW)**: 0.09% missing
+- **Cascading potential power (kW)**: 0.08% missing
+- **Cascading potential power for performance (kW)**: 0.86% missing
+- **Potential power met mast anemometer (kW)**: 100.0% missing
+- **Potential power primary reference turbines (kW)**: 0.9% missing
+- **Potential power secondary reference turbines (kW)**: 0.42% missing
+- **Turbine Power setpoint (kW)**: 1.35% missing
+- **Potential power estimated (kW)**: 99.13% missing
+- **Potential power MPC (kW)**: 0.86% missing
+- **Potential power met mast anemometer MPC (kW)**: 100.0% missing
+- **Turbine Power setpoint, Max (kW)**: 8.29% missing
+- **Turbine Power setpoint, Min (kW)**: 8.29% missing
+- **Turbine Power setpoint, StdDev (kW)**: 8.29% missing
+- **Available Capacity for Production (kW)**: 0.54% missing
+- **Power factor (cosphi)**: 0.86% missing
+- **Power factor (cosphi), Max**: 1.35% missing
+- **Power factor (cosphi), Min**: 1.35% missing
+- **Power factor (cosphi), Standard deviation**: 1.35% missing
+- **Reactive power (kvar)**: 0.87% missing
+- **Reactive power, Max (kvar)**: 1.35% missing
+- **Reactive power, Min (kvar)**: 1.35% missing
+- **Reactive power, Standard deviation (kvar)**: 1.35% missing
+- **Front bearing temperature (°C)**: 1.35% missing
+- **Rear bearing temperature (°C)**: 1.35% missing
+- **Stator temperature 1 (°C)**: 0.86% missing
+- **Nacelle ambient temperature (°C)**: 1.35% missing
+- **Nacelle temperature (°C)**: 1.35% missing
+- **Transformer temperature (°C)**: 1.35% missing
+- **Gear oil inlet temperature (°C)**: 1.35% missing
+- **Generator bearing rear temperature (°C)**: 0.86% missing
+- **Generator bearing front temperature (°C)**: 0.86% missing
+- **Gear oil temperature (°C)**: 1.35% missing
+- **Temp. top box (°C)**: 0.86% missing
+- **Hub temperature (°C)**: 0.86% missing
+- **Ambient temperature (converter) (°C)**: 0.86% missing
+- **Rotor bearing temp (°C)**: 0.86% missing
+- **Transformer cell temperature (°C)**: 1.35% missing
+- **Front bearing temperature, Max (°C)**: 1.35% missing
+- **Front bearing temperature, Min (°C)**: 1.35% missing
+- **Front bearing temperature, Standard deviation (°C)**: 1.35% missing
+- **Rear bearing temperature, Max (°C)**: 1.35% missing
+- **Rear bearing temperature, Min (°C)**: 1.35% missing
+- **Rear bearing temperature, Standard deviation (°C)**: 1.35% missing
+- **Temperature motor axis 1 (°C)**: 0.86% missing
+- **Temperature motor axis 2 (°C)**: 0.86% missing
+- **Temperature motor axis 3 (°C)**: 0.86% missing
+- **CPU temperature (°C)**: 0.86% missing
+- **Nacelle temperature, Max (°C)**: 1.35% missing
+- **Nacelle temperature, Min (°C)**: 1.35% missing
+- **Generator bearing front temperature, Max (°C)**: 1.35% missing
+- **Generator bearing front temperature, Min (°C)**: 1.35% missing
+- **Generator bearing rear temperature, Max (°C)**: 1.35% missing
+- **Generator bearing rear temperature, Min (°C)**: 1.35% missing
+- **Generator bearing front temperature, Std (°C)**: 1.35% missing
+- **Generator bearing rear temperature, Std (°C)**: 1.35% missing
+- **Nacelle temperature, Standard deviation (°C)**: 1.35% missing
+- **Gear oil temperature, Max (°C)**: 1.35% missing
+- **Gear oil temperature, Min (°C)**: 1.35% missing
+- **Gear oil temperature, Standard deviation (°C)**: 1.35% missing
+- **Hub temperature, min (°C)**: 1.35% missing
+- **Hub temperature, max (°C)**: 1.35% missing
+- **Hub temperature, standard deviation (°C)**: 1.35% missing
+- **Ambient temperature (converter), Max (°C)**: 8.29% missing
+- **Ambient temperature (converter), Min (°C)**: 8.29% missing
+- **Ambient temperature (converter), StdDev (°C)**: 8.29% missing
+- **Gear oil inlet temperature, Max (°C)**: 8.29% missing
+- **Gear oil inlet temperature, Min (°C)**: 8.29% missing
+- **Gear oil inlet temperature, StdDev (°C)**: 8.29% missing
+- **Nacelle ambient temperature, Max (°C)**: 8.29% missing
+- **Nacelle ambient temperature, Min (°C)**: 8.29% missing
+- **Nacelle ambient temperature, StdDev (°C)**: 8.29% missing
+- **Rotor bearing temp, Max (°C)**: 8.3% missing
+- **Rotor bearing temp, Min (°C)**: 8.3% missing
+- **Rotor bearing temp, StdDev (°C)**: 8.3% missing
+- **CPU temperature, Max (°C)**: 8.3% missing
+- **CPU temperature, Min (°C)**: 8.3% missing
+- **CPU temperature, StdDev (°C)**: 8.3% missing
+- **Transformer cell temperature, Max (°C)**: 8.3% missing
+- **Transformer cell temperature, Min (°C)**: 8.3% missing
+- **Transformer cell temperature, StdDev (°C)**: 8.3% missing
+- **Transformer temperature, Max (°C)**: 8.3% missing
+- **Transformer temperature, Min (°C)**: 8.3% missing
+- **Transformer temperature, StdDev (°C)**: 8.3% missing
+- **Stator temperature 1, Max (°C)**: 8.3% missing
+- **Stator temperature 1, Min (°C)**: 8.3% missing
+- **Stator temperature 1, StdDev (°C)**: 8.3% missing
+- **Temp. top box, Max (°C)**: 8.3% missing
+- **Temp. top box, Min (°C)**: 8.3% missing
+- **Temp. top box, StdDev (°C)**: 8.3% missing
+- **Temperature motor axis 1, Max (°C)**: 8.3% missing
+- **Temperature motor axis 1, Min (°C)**: 8.3% missing
+- **Temperature motor axis 1, StdDev (°C)**: 8.3% missing
+- **Temperature motor axis 2, Max (°C)**: 8.3% missing
+- **Temperature motor axis 2, Min (°C)**: 8.3% missing
+- **Temperature motor axis 2, StdDev (°C)**: 8.3% missing
+- **Temperature motor axis 3, Max (°C)**: 8.3% missing
+- **Temperature motor axis 3, Min (°C)**: 8.3% missing
+- **Temperature motor axis 3, StdDev (°C)**: 8.3% missing
+- **Voltage L1 / U (V)**: 1.35% missing
+- **Voltage L2 / V (V)**: 1.35% missing
+- **Voltage L3 / W (V)**: 1.35% missing
+- **Grid voltage (V)**: 0.86% missing
+- **Grid voltage, Max (V)**: 1.35% missing
+- **Grid voltage, Min (V)**: 1.35% missing
+- **Grid voltage, Standard deviation (V)**: 1.35% missing
+- **Voltage L1 / U, Min (V)**: 1.35% missing
+- **Voltage L1 / U, Max (V)**: 1.35% missing
+- **Voltage L1 / U, Standard deviation (V)**: 1.35% missing
+- **Voltage L2 / V, Min (V)**: 1.35% missing
+- **Voltage L2 / V, Max (V)**: 1.35% missing
+- **Voltage L2 / V, Standard deviation (V)**: 1.35% missing
+- **Voltage L3 / W, Min (V)**: 1.35% missing
+- **Voltage L3 / W, Max (V)**: 1.35% missing
+- **Voltage L3 / W, Standard deviation (V)**: 1.35% missing
+- **Current L1 / U (A)**: 1.35% missing
+- **Current L2 / V (A)**: 1.35% missing
+- **Current L3 / W (A)**: 1.35% missing
+- **Grid current (A)**: 0.86% missing
+- **Motor current axis 1 (A)**: 0.86% missing
+- **Motor current axis 2 (A)**: 0.86% missing
+- **Motor current axis 3 (A)**: 0.86% missing
+- **Current L1 / U, min (A)**: 1.35% missing
+- **Current L1 / U, max (A)**: 1.35% missing
+- **Current L1 / U, StdDev (A)**: 1.35% missing
+- **Current L2 / V, max (A)**: 1.35% missing
+- **Current L3 / W, max (A)**: 1.35% missing
+- **Current L2 / V, min (A)**: 1.35% missing
+- **Current L2 / V, StdDev (A)**: 1.35% missing
+- **Current L3 / W, min (A)**: 1.35% missing
+- **Current L3 / W, StdDev (A)**: 1.35% missing
+- **Grid current, Max (A)**: 7.73% missing
+- **Grid current, Min (A)**: 7.73% missing
+- **Grid current, StdDev (A)**: 7.73% missing
+- **Motor current axis 1, Max (A)**: 8.3% missing
+- **Motor current axis 1, Min (A)**: 8.3% missing
+- **Motor current axis 1, StdDev (A)**: 8.3% missing
+- **Motor current axis 2, Max (A)**: 8.3% missing
+- **Motor current axis 2, Min (A)**: 8.3% missing
+- **Motor current axis 2, StdDev (A)**: 8.3% missing
+- **Motor current axis 3, Max (A)**: 8.3% missing
+- **Motor current axis 3, Min (A)**: 8.3% missing
+- **Motor current axis 3, StdDev (A)**: 8.3% missing
+- **Rotor speed (RPM)**: 0.86% missing
+- **Generator RPM (RPM)**: 0.86% missing
+- **Gearbox speed (RPM)**: 1.35% missing
+- **Generator RPM, Max (RPM)**: 1.35% missing
+- **Generator RPM, Min (RPM)**: 1.35% missing
+- **Generator RPM, Standard deviation (RPM)**: 1.35% missing
+- **Rotor speed, Max (RPM)**: 1.35% missing
+- **Rotor speed, Min (RPM)**: 1.35% missing
+- **Rotor speed, Standard deviation (RPM)**: 1.35% missing
+- **Gearbox speed, Max (RPM)**: 8.29% missing
+- **Gearbox speed, Min (RPM)**: 8.29% missing
+- **Gearbox speed, StdDev (RPM)**: 8.29% missing
+- **Time-based Contractual Avail.**: 0.53% missing
+- **Time-based IEC B.2.2 (Users View)**: 0.53% missing
+- **Time-based IEC B.2.3 (Users View)**: 0.53% missing
+- **Time-based IEC B.2.4 (Users View)**: 0.81% missing
+- **Time-based IEC B.3.2 (Manufacturers View)**: 0.66% missing
+- **Production-based IEC B.2.2 (Users View)**: 0.54% missing
+- **Production-based IEC B.2.3 (Users View)**: 12.67% missing
+- **Production-based IEC B.3.2 (Manufacturers View)**: 0.67% missing
+- **Time-based System Avail.**: 0.54% missing
+- **Production-based System Avail.**: 0.54% missing
+- **Production-based Contractual Avail.**: 0.54% missing
+- **Production-based System Avail. (virtual)**: 0.54% missing
+- **Time-based Contractual Avail. (Global)**: 100.0% missing
+- **Time-based Contractual Avail. (Custom)**: 100.0% missing
+- **Production-based Contractual Avail. (Global)**: 100.0% missing
+- **Production-based Contractual Avail. (Custom)**: 100.0% missing
+- **Reactive Energy Export (kvarh)**: 6.06% missing
+- **Reactive Energy Export counter (kvarh)**: 99.86% missing
+- **Reactive Energy Import counter (kvarh)**: 9.46% missing
+- **Blade angle (pitch position) A (°)**: 1.35% missing
+- **Blade angle (pitch position) B (°)**: 1.35% missing
+- **Blade angle (pitch position) C (°)**: 1.35% missing
+- **Yaw bearing angle (°)**: 1.35% missing
+- **Blade angle (pitch position) A, Max (°)**: 1.35% missing
+- **Blade angle (pitch position) A, Min (°)**: 1.35% missing
+- **Blade angle (pitch position) A, Standard deviation (°)**: 1.35% missing
+- **Blade angle (pitch position) B, Max (°)**: 1.35% missing
+- **Blade angle (pitch position) B, Min (°)**: 1.35% missing
+- **Blade angle (pitch position) B, Standard deviation (°)**: 1.35% missing
+- **Blade angle (pitch position) C, Max (°)**: 1.35% missing
+- **Blade angle (pitch position) C, Min (°)**: 1.35% missing
+- **Blade angle (pitch position) C, Standard deviation (°)**: 1.35% missing
+- **Yaw bearing angle, Max (°)**: 8.29% missing
+- **Yaw bearing angle, Min (°)**: 8.29% missing
+- **Yaw bearing angle, StdDev (°)**: 8.29% missing
+- **Gear oil inlet pressure (bar)**: 0.86% missing
+- **Gear oil pump pressure (bar)**: 0.86% missing
+- **Gear oil inlet pressure, Max (bar)**: 8.29% missing
+- **Gear oil inlet pressure, Min (bar)**: 8.29% missing
+- **Gear oil inlet pressure, StdDev (bar)**: 8.29% missing
+- **Gear oil pump pressure, Max (bar)**: 8.29% missing
+- **Gear oil pump pressure, Min (bar)**: 8.29% missing
+- **Gear oil pump pressure, StdDev (bar)**: 8.29% missing
+- **Grid frequency (Hz)**: 0.86% missing
+- **Grid frequency, Max (Hz)**: 1.35% missing
+- **Grid frequency, Min (Hz)**: 1.35% missing
+- **Grid frequency, Standard deviation (Hz)**: 1.35% missing
+- **Equivalent Full Load Hours counter (s)**: 100.0% missing
+- **Production Factor**: 0.86% missing
+- **Performance Index**: 2.14% missing
+- **Apparent power (kVA)**: 0.87% missing
+- **Apparent power, Max (kVA)**: 8.29% missing
+- **Apparent power, Min (kVA)**: 8.29% missing
+- **Apparent power, StdDev (kVA)**: 8.29% missing
+- **Cable windings from calibration point**: 1.35% missing
+- **Metal particle count counter**: 1.35% missing
+- **Cable windings from calibration point, Max**: 8.3% missing
+- **Cable windings from calibration point, Min**: 8.3% missing
+- **Cable windings from calibration point, StdDev**: 8.3% missing
+- **Drive train acceleration (mm/ss)**: 0.89% missing
+- **Tower Acceleration X (mm/ss)**: 1.35% missing
+- **Tower Acceleration y (mm/ss)**: 1.35% missing
+- **Tower Acceleration X, Min (mm/ss)**: 8.29% missing
+- **Tower Acceleration X, Max (mm/ss)**: 8.29% missing
+- **Tower Acceleration Y, Min (mm/ss)**: 8.29% missing
+- **Tower Acceleration Y, Max (mm/ss)**: 8.29% missing
+- **Drive train acceleration, Max (mm/ss)**: 8.31% missing
+- **Drive train acceleration, Min (mm/ss)**: 8.31% missing
+- **Drive train acceleration, StdDev (mm/ss)**: 8.31% missing
+- **Tower Acceleration X, StdDev (mm/ss)**: 8.29% missing
+- **Tower Acceleration Y, StdDev (mm/ss)**: 8.29% missing
+
+## 2. Duplicate Timestamps
+- Found 0 duplicate time entries.
+
+## 3. Constant or Near-Constant Variables
+- The following variables have only 1 unique value (or are completely empty):
+  - Lost Production to Curtailment (Total) (kWh)
+  - Lost Production to Curtailment (Grid) (kWh)
+  - Lost Production to Curtailment (Noise) (kWh)
+  - Lost Production to Curtailment (Shadow) (kWh)
+  - Lost Production to Curtailment (Bats) (kWh)
+  - Lost Production to Curtailment (Birds) (kWh)
+  - Lost Production to Curtailment (Ice) (kWh)
+  - Lost Production to Curtailment (Sector Management) (kWh)
+  - Lost Production to Curtailment (Technical) (kWh)
+  - Lost Production to Curtailment (Marketing) (kWh)
+  - Lost Production to Curtailment (Boat Action) (kWh)
+  - Compensated Lost Production (kWh)
+  - Lost Production to Curtailment (Grid Constraint) (kWh)
+  - Lost Production (Contractual Global) (kWh)
+  - Lost Production (Contractual Custom) (kWh)
+  - Potential power met mast anemometer (kW)
+  - Potential power met mast anemometer MPC (kW)
+  - Available Capacity for Production (Planned) (kW)
+  - Time-based System Avail. (Planned)
+  - Time-based Contractual Avail. (Global)
+  - Time-based Contractual Avail. (Custom)
+  - Production-based Contractual Avail. (Global)
+  - Production-based Contractual Avail. (Custom)
+  - Equivalent Full Load Hours counter (s)
